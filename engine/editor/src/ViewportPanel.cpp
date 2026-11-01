@@ -236,7 +236,7 @@ void ManipulateSelection(EditorState& state, const math::Mat4& view, const math:
   }
 
   const math::Mat4 world = state.scene.WorldMatrix(entity->id);
-  math::Mat4 manipulated = math::Transpose(world);
+  math::Mat4 manipulated = world;
   float snap[3]{0.0f, 0.0f, 0.0f};
   const float* snapPointer = nullptr;
   if (ImGui::GetIO().KeyCtrl) {
@@ -255,7 +255,7 @@ void ManipulateSelection(EditorState& state, const math::Mat4& view, const math:
     return;
   }
 
-  math::Mat4 local = math::Transpose(manipulated);
+  math::Mat4 local = manipulated;
   if (entity->parent != scene::kNoEntity) {
     const math::Mat4 parentInverse = math::Inverse(state.scene.WorldMatrix(entity->parent));
     local = math::Multiply(local, parentInverse);
@@ -435,15 +435,13 @@ void DrawViewport(EditorState& state) {
   const float aspect = canvasSize.y > 0.0f ? canvasSize.x / canvasSize.y : 1.0f;
   const math::Mat4 view = state.camera.ViewMatrix();
   const math::Mat4 projection = state.camera.ProjectionMatrix(aspect);
-  const math::Mat4 viewTransposed = math::Transpose(view);
-  const math::Mat4 projectionTransposed = math::Transpose(projection);
 
   ImGuizmo::SetRect(canvasOrigin.x, canvasOrigin.y, canvasSize.x, canvasSize.y);
   ImGuizmo::SetOrthographic(false);
   ImGuizmo::SetDrawlist(drawList);
 
   const math::Mat4 identity = math::Identity();
-  ImGuizmo::DrawGrid(&viewTransposed._11, &projectionTransposed._11, &identity._11, kGridSize);
+  ImGuizmo::DrawGrid(&view._11, &projection._11, &identity._11, kGridSize);
 
   const std::vector<ScreenMarker> markers =
       BuildMarkers(state, view, projection, canvasOrigin, canvasSize);
@@ -461,7 +459,7 @@ void DrawViewport(EditorState& state) {
   }
   DrawMarkers(state, view, projection, markers, hoveredMarker, canvasOrigin, canvasSize);
 
-  ManipulateSelection(state, viewTransposed, projectionTransposed);
+  ManipulateSelection(state, view, projection);
 
   const bool gizmoBusy =
       state.scene.Find(state.selected) != nullptr && (ImGuizmo::IsOver() || ImGuizmo::IsUsing());
