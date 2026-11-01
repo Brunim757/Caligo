@@ -106,7 +106,7 @@ TEST_CASE("math view matrix places the target in front") {
       caligo::math::TransformPoint(view, caligo::math::Vec3{0.0f, 0.0f, 0.0f});
   CHECK(origin.x == doctest::Approx(0.0f));
   CHECK(origin.y == doctest::Approx(0.0f));
-  CHECK(origin.z == doctest::Approx(-5.0f));
+  CHECK(origin.z == doctest::Approx(5.0f));
 
   const caligo::math::Vec3 point{2.0f, 3.0f, 4.0f};
   const caligo::math::Vec3 identityPoint =

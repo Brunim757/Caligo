@@ -2,7 +2,7 @@
 
 > Engine de mundo aberto estilizado. Windows. Cidade densa e natureza estilizada. Nada além.
 
-Versão 0.5
+Versão 0.6
 
 ## 1. Identidade
 
@@ -50,6 +50,7 @@ Estas decisões não mudam sem RFC. A regra está na seção 11.
 | D-022 | Valor do limite: 600 linhas em `.cpp`, 400 em `.h`, revisado após a R2 | PROVISÓRIO |
 | D-023 | Código proprietário; repositório público apenas para o CI gratuito | FIXO |
 | D-024 | JSON de cena e ferramentas: nlohmann/json 3.12.0 | FIXO |
+| D-025 | Coordenadas canhotas, com +X à direita, +Y para cima e +Z para frente | FIXO |
 
 ## 3. Não-objetivos
 
@@ -247,3 +248,5 @@ O objetivo não é congelar a engine. É impedir que uma decisão fechada seja r
 - **0.2** — UI de jogo como sistema próprio e release R6; limite de arquivo; referência à arquitetura.
 - **0.3** — limite por arquivo separado em `.cpp` e `.h`, com valor provisório e allowlist; revisão após a R2.
 - **0.4** — código proprietário; repositório público apenas para o CI gratuito.
+- **0.5** — nlohmann/json 3.12.0 como biblioteca JSON da cena e das ferramentas.
+- **0.6** — coordenadas canhotas com +X à direita, +Y para cima e +Z para frente.

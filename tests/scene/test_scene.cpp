@@ -39,8 +39,8 @@ TEST_CASE("scene builds hierarchy and world transforms") {
   CHECK(worldPosition.y == doctest::Approx(5.0f));
   CHECK(worldPosition.z == doctest::Approx(0.0f));
 
-  CHECK(scene.SetParent(child, caligo::scene::kNoEntity));
   CHECK_FALSE(scene.SetParent(root, child));
+  CHECK(scene.SetParent(child, caligo::scene::kNoEntity));
 }
 
 TEST_CASE("scene destroys subtrees") {

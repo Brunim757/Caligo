@@ -1,6 +1,6 @@
 # Caligo — Registro de Decisões
 
-Versão 0.2
+Versão 0.3
 
 ## Como funciona
 
@@ -32,8 +32,10 @@ Toda decisão tem ID, status e consequência. `FIXO` só muda por RFC em `docs/r
 | D-022 | PROVISÓRIO | Limite de 600 linhas em `.cpp` e 400 em `.h`, revisado após a R2. | O número precisa de código real para ser calibrado. | Funções até 80 linhas; tipos até 20 métodos públicos. |
 | D-023 | FIXO | Código proprietário; repositório público apenas para o CI gratuito. | O limite de minutos do CI privado impede o fluxo de validação. | Todo direito é reservado; visibilidade pública não concede licença. |
 | D-024 | FIXO | JSON de cena e de ferramentas usa nlohmann/json 3.12.0. | Biblioteca header-only, sem dependência de toolchain extra, com tag fixa. | Parsing e gravação ficam restritos a cena e ferramentas; o runtime lê apenas o contêiner cozido. |
+| D-025 | FIXO | Coordenadas canhotas, com +X à direita, +Y para cima e +Z para frente. | Direct3D 11 e DirectXMath já usam essa convenção; evita conversão por frame. | O espaço de visão tem Z positivo à frente; importadores convertem ativos de fontes destras. |
 
 ## Histórico
 
+- **0.3** — registra a D-025: coordenadas canhotas com Z positivo à frente.
 - **0.2** — registra a D-024 e a biblioteca JSON da stack.
 - **0.1** — registro inicial das decisões D-001 a D-023.
