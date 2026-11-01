@@ -111,36 +111,63 @@ Result<std::string> ReadName(const Json& entity, EntityId id) {
   return name->get<std::string>();
 }
 
-Result<Transform> ReadComponents(const Json& entity, EntityId id) {
+struct EntityComponents {
+  Transform transform;
+  std::vector<std::string> scripts;
+};
+
+Result<EntityComponents> ReadComponents(const Json& entity, EntityId id) {
   const Json* components = Member(entity, "components");
   if (components == nullptr || !components->is_array()) {
     return Error{std::format("entity {} components must be an array", id), 24};
   }
   bool hasTransform = false;
-  Transform transform;
+  EntityComponents parsed;
   for (const Json& component : *components) {
     const Json* type = Member(component, "type");
     if (type == nullptr || !type->is_string()) {
       return Error{std::format("entity {} has a component without a type", id), 25};
     }
     const std::string typeName = type->get<std::string>();
-    if (typeName != "caligo.transform") {
-      return Error{std::format("entity {} uses unsupported component {}", id, typeName), 26};
+    if (typeName == "caligo.transform") {
+      if (hasTransform) {
+        return Error{std::format("entity {} has more than one transform", id), 27};
+      }
+      Result<Transform> transform = ReadTransform(component, id);
+      if (!transform) {
+        return transform.GetError();
+      }
+      parsed.transform = transform.Value();
+      hasTransform = true;
+      continue;
     }
-    if (hasTransform) {
-      return Error{std::format("entity {} has more than one transform", id), 27};
+    if (typeName == "caligo.script") {
+      const Json* scriptType = Member(component, "class");
+      if (scriptType == nullptr || !scriptType->is_string()) {
+        return Error{std::format("entity {} script class must be a string", id), 29};
+      }
+      const std::string className = scriptType->get<std::string>();
+      if (!IsValidScriptType(className)) {
+        return Error{std::format("entity {} has an invalid script class '{}'", id, className), 31};
+      }
+      if (parsed.scripts.size() >= kMaxScriptsPerEntity) {
+        return Error{std::format("entity {} has too many script components", id), 32};
+      }
+      const bool duplicate =
+          std::any_of(parsed.scripts.begin(), parsed.scripts.end(),
+                      [&className](const std::string& existing) { return existing == className; });
+      if (duplicate) {
+        return Error{std::format("entity {} repeats the script class '{}'", id, className), 33};
+      }
+      parsed.scripts.push_back(className);
+      continue;
     }
-    Result<Transform> parsed = ReadTransform(component, id);
-    if (!parsed) {
-      return parsed.GetError();
-    }
-    transform = parsed.Value();
-    hasTransform = true;
+    return Error{std::format("entity {} uses unsupported component {}", id, typeName), 26};
   }
   if (!hasTransform) {
     return Error{std::format("entity {} is missing the transform component", id), 28};
   }
-  return transform;
+  return parsed;
 }
 
 Result<Entity> ReadEntity(const Json& value) {
@@ -157,16 +184,22 @@ Result<Entity> ReadEntity(const Json& value) {
   if (!name) {
     return name.GetError();
   }
-  Result<Transform> transform = ReadComponents(value, id);
-  if (!transform) {
-    return transform.GetError();
+  Result<EntityComponents> components = ReadComponents(value, id);
+  if (!components) {
+    return components.GetError();
   }
 
   Entity entity;
   entity.id = id;
   entity.parent = parent;
   entity.name = std::move(name).Value();
-  entity.transform = transform.Value();
+  entity.transform = components.Value().transform;
+  entity.scripts.reserve(components.Value().scripts.size());
+  for (std::string& script : components.Value().scripts) {
+    ScriptComponent component;
+    component.type = std::move(script);
+    entity.scripts.push_back(std::move(component));
+  }
   return entity;
 }
 
@@ -180,7 +213,7 @@ Result<std::string> SaveSceneToString(const Scene& scene) {
 
   Json root = Json::object();
   root["format"] = "caligo.scene";
-  root["version"] = 1;
+  root["version"] = 2;
   root["guid"] = scene.Guid();
   root["entities"] = Json::array();
 
@@ -193,21 +226,29 @@ Result<std::string> SaveSceneToString(const Scene& scene) {
             [](const Entity* left, const Entity* right) { return left->id < right->id; });
 
   for (const Entity* entity : sorted) {
-    Json component = Json::object();
-    component["type"] = "caligo.transform";
-    component["position"] = Json::array(
+    Json transform = Json::object();
+    transform["type"] = "caligo.transform";
+    transform["position"] = Json::array(
         {entity->transform.position.x, entity->transform.position.y, entity->transform.position.z});
-    component["rotation"] =
+    transform["rotation"] =
         Json::array({entity->transform.rotation.x, entity->transform.rotation.y,
                      entity->transform.rotation.z, entity->transform.rotation.w});
-    component["scale"] = Json::array(
+    transform["scale"] = Json::array(
         {entity->transform.scale.x, entity->transform.scale.y, entity->transform.scale.z});
+
+    Json components = Json::array({std::move(transform)});
+    for (const ScriptComponent& script : entity->scripts) {
+      Json component = Json::object();
+      component["type"] = "caligo.script";
+      component["class"] = script.type;
+      components.push_back(std::move(component));
+    }
 
     Json serialized = Json::object();
     serialized["id"] = entity->id;
     serialized["name"] = entity->name;
     serialized["parent"] = entity->parent;
-    serialized["components"] = Json::array({std::move(component)});
+    serialized["components"] = std::move(components);
     root["entities"].push_back(std::move(serialized));
   }
 
@@ -233,7 +274,7 @@ Result<Scene> LoadSceneFromString(std::string_view text) {
     return Error{"scene version must be an integer", 43};
   }
   const double versionNumber = version->get<double>();
-  if (versionNumber != 1.0) {
+  if (versionNumber != 1.0 && versionNumber != 2.0) {
     return Error{"scene version is not supported", 44};
   }
 
@@ -261,6 +302,12 @@ Result<Scene> LoadSceneFromString(std::string_view text) {
     if (!scene.InsertEntity(parsed.id, parsed.name, parsed.parent, parsed.transform)) {
       return Error{std::format("entity {} could not be inserted; ids must be unique", parsed.id),
                    48};
+    }
+    for (const ScriptComponent& script : parsed.scripts) {
+      if (!scene.AddScript(parsed.id, script.type)) {
+        return Error{
+            std::format("entity {} script '{}' could not be attached", parsed.id, script.type), 49};
+      }
     }
   }
 

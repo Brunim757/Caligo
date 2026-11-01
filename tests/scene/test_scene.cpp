@@ -106,3 +106,55 @@ TEST_CASE("scene validates edits") {
   CHECK(caligo::scene::IsValidGuid(scene.Guid()));
   CHECK(scene.Validate());
 }
+
+TEST_CASE("scene manages script components") {
+  CHECK(caligo::scene::IsValidScriptType("Spinner"));
+  CHECK(caligo::scene::IsValidScriptType("Caligo.Gameplay.PlayerMover"));
+  CHECK(caligo::scene::IsValidScriptType("A1._B"));
+  CHECK_FALSE(caligo::scene::IsValidScriptType(""));
+  CHECK_FALSE(caligo::scene::IsValidScriptType("1Spinner"));
+  CHECK_FALSE(caligo::scene::IsValidScriptType(".Spinner"));
+  CHECK_FALSE(caligo::scene::IsValidScriptType("Spinner."));
+  CHECK_FALSE(caligo::scene::IsValidScriptType("Spinner..Parte"));
+  CHECK_FALSE(caligo::scene::IsValidScriptType("Spinner-Parte"));
+  CHECK_FALSE(
+      caligo::scene::IsValidScriptType(std::string(caligo::scene::kMaxScriptTypeLength + 1, 'A')));
+
+  caligo::scene::Scene scene;
+  const caligo::scene::EntityId entity = CreateEntity(scene, "Entidade");
+  REQUIRE(entity != caligo::scene::kNoEntity);
+  CHECK_FALSE(scene.AddScript(9999, "Spinner"));
+  CHECK_FALSE(scene.AddScript(entity, "Spinner!"));
+  CHECK(scene.AddScript(entity, "Spinner"));
+  CHECK_FALSE(scene.AddScript(entity, "Spinner"));
+  CHECK(scene.AddScript(entity, "PlayerMover"));
+  REQUIRE(scene.Find(entity)->scripts.size() == 2);
+  CHECK(scene.Find(entity)->scripts[0].type == "Spinner");
+  CHECK(scene.Find(entity)->scripts[1].type == "PlayerMover");
+  CHECK(scene.Validate());
+
+  CHECK_FALSE(scene.RemoveScript(entity, "Desconhecido"));
+  CHECK(scene.RemoveScript(entity, "Spinner"));
+  REQUIRE(scene.Find(entity)->scripts.size() == 1);
+  CHECK(scene.Find(entity)->scripts[0].type == "PlayerMover");
+
+  for (size_t index = 1; index < caligo::scene::kMaxScriptsPerEntity; ++index) {
+    REQUIRE(scene.AddScript(entity, std::string("Script") + std::to_string(index)));
+  }
+  CHECK_FALSE(scene.AddScript(entity, "ScriptExtra"));
+  CHECK(scene.Validate());
+}
+
+TEST_CASE("scene validation rejects bad script components") {
+  caligo::scene::Scene scene;
+  const caligo::scene::EntityId entity = CreateEntity(scene, "Entidade");
+  REQUIRE(entity != caligo::scene::kNoEntity);
+  REQUIRE(scene.AddScript(entity, "Spinner"));
+  REQUIRE(scene.Validate());
+
+  scene.Find(entity)->scripts.front().type = "Spinner!";
+  CHECK_FALSE(scene.Validate());
+  scene.Find(entity)->scripts.front().type = "Spinner";
+  scene.Find(entity)->scripts.push_back(caligo::scene::ScriptComponent{"Spinner"});
+  CHECK_FALSE(scene.Validate());
+}
