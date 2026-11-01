@@ -1,5 +1,4 @@
 #include "EditorPanels.h"
-
 #include <caligo/core/Log.h>
 #include <caligo/platform/File.h>
 #include <caligo/platform/FileDialog.h>

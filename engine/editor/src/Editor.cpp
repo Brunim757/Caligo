@@ -1,6 +1,7 @@
+#include <windows.h>
+
 #include "EditorPanels.h"
 #include "EditorState.h"
-
 #include <ImGuizmo.h>
 #include <algorithm>
 #include <caligo/core/Log.h>
@@ -15,7 +16,6 @@
 #include <memory>
 #include <string>
 #include <utility>
-#include <windows.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window, UINT message,
                                                              WPARAM wParam, LPARAM lParam);

@@ -1,5 +1,4 @@
 #include "EditorPanels.h"
-
 #include <algorithm>
 #include <caligo/core/Log.h>
 #include <cmath>

@@ -1,5 +1,4 @@
 #include "EditorPanels.h"
-
 #include <ImGuizmo.h>
 #include <algorithm>
 #include <array>

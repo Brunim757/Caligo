@@ -1,12 +1,14 @@
+#include <windows.h>
+
+#include <commdlg.h>
+
 #include <algorithm>
 #include <caligo/platform/FileDialog.h>
-#include <commdlg.h>
 #include <cstddef>
 #include <format>
 #include <limits>
 #include <string>
 #include <vector>
-#include <windows.h>
 
 namespace caligo::platform {
 

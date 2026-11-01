@@ -1,5 +1,6 @@
-#include <caligo/platform/Input.h>
 #include <windows.h>
+
+#include <caligo/platform/Input.h>
 
 namespace caligo::platform {
 

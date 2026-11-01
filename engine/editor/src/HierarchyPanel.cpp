@@ -1,5 +1,4 @@
 #include "EditorPanels.h"
-
 #include <caligo/core/Log.h>
 #include <imgui.h>
 #include <string>

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "EditorState.h"
-
 #include <filesystem>
 #include <string>
 

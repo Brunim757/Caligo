@@ -1,10 +1,11 @@
+#include <windows.h>
+
 #include <caligo/render/GraphicsDevice.h>
 #include <d3d11.h>
 #include <dxgi1_3.h>
 #include <format>
 #include <iterator>
 #include <string>
-#include <windows.h>
 #include <wrl/client.h>
 
 namespace caligo::render {

@@ -1,10 +1,11 @@
+#include <windows.h>
+
 #include <caligo/platform/File.h>
 #include <cstring>
 #include <format>
 #include <fstream>
 #include <string>
 #include <system_error>
-#include <windows.h>
 
 namespace caligo::platform {
 

@@ -1,7 +1,8 @@
+#include <windows.h>
+
 #include <caligo/platform/System.h>
 #include <format>
 #include <string>
-#include <windows.h>
 
 namespace caligo::platform {
 

@@ -14,6 +14,13 @@ AllowShortLoopsOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 SortIncludes: CaseSensitive
 IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<windows\.h>$'
+    Priority: 1
+  - Regex: '^<commdlg\.h>$'
+    Priority: 2
+  - Regex: '.*'
+    Priority: 3
 IndentCaseLabels: false
 NamespaceIndentation: None
 AccessModifierOffset: -2

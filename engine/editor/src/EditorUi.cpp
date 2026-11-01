@@ -1,5 +1,4 @@
 #include "EditorPanels.h"
-
 #include <ImGuizmo.h>
 #include <caligo/platform/File.h>
 #include <caligo/platform/System.h>

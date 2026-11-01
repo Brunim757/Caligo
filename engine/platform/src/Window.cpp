@@ -1,3 +1,5 @@
+#include <windows.h>
+
 #include <caligo/core/Log.h>
 #include <caligo/platform/Window.h>
 #include <format>
@@ -5,7 +7,6 @@
 #include <optional>
 #include <string>
 #include <utility>
-#include <windows.h>
 #include <windowsx.h>
 
 namespace caligo::platform {

@@ -1,5 +1,4 @@
 #include "EditorState.h"
-
 #include <algorithm>
 #include <cmath>
 
