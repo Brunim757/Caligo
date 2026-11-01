@@ -147,7 +147,11 @@ void TogglePlayPause(EditorState& state) {
   }
   state.play.paused = !state.play.paused;
   state.play.stepRequested = false;
-  CALIGO_LOG_INFO(state.play.paused ? "execução pausada" : "execução retomada");
+  if (state.play.paused) {
+    CALIGO_LOG_INFO("execução pausada");
+  } else {
+    CALIGO_LOG_INFO("execução retomada");
+  }
 }
 
 void RequestPlayStep(EditorState& state) {
