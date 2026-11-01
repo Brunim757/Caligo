@@ -3,15 +3,18 @@
 #include <array>
 #include <caligo/core/Log.h>
 #include <caligo/core/Math.h>
+#include <caligo/core/Time.h>
 #include <caligo/editor/ConsoleBuffer.h>
 #include <caligo/platform/Window.h>
 #include <caligo/render/GraphicsDevice.h>
 #include <caligo/scene/Scene.h>
+#include <caligo/script/ScriptHost.h>
 #include <cstdint>
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace caligo::editor {
 
@@ -31,6 +34,16 @@ struct Camera {
 };
 
 enum class PendingAction { None, NewScene, OpenScene, Quit };
+
+struct PlaySession {
+  bool active = false;
+  bool paused = false;
+  bool stepRequested = false;
+  uint64_t ticks = 0;
+  scene::Scene snapshot;
+  FrameTimer timer;
+  Clock clock;
+};
 
 struct EditorState {
   platform::Window* window = nullptr;
@@ -73,9 +86,17 @@ struct EditorState {
   bool autoScrollConsole = true;
   LogLevel consoleMinimumLevel = LogLevel::Trace;
   std::string windowTitle;
+
+  script::ScriptHost scriptHost;
+  std::vector<std::string> scriptTypes;
+  script::ScriptInput scriptInput;
+  PlaySession play;
 };
 
 [[nodiscard]] inline bool IsDirty(const EditorState& state) noexcept {
+  if (state.play.active) {
+    return false;
+  }
   return state.scene.Revision() != state.savedRevision;
 }
 

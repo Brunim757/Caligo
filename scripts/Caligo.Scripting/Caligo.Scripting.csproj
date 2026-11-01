@@ -5,6 +5,5 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Caligo.Gameplay.Tests" />
-    <None Include="Caligo.Scripting.runtimeconfig.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

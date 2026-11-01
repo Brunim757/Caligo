@@ -41,12 +41,12 @@ void DrawEntityNode(EditorState& state, scene::EntityId id) {
     SelectEntity(state, id);
   }
 
-  if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+  if (!state.play.active && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
     ImGui::SetDragDropPayload("CALIGO_ENTITY", &id, sizeof(id));
     ImGui::TextUnformatted(entity->name.c_str());
     ImGui::EndDragDropSource();
   }
-  if (ImGui::BeginDragDropTarget()) {
+  if (!state.play.active && ImGui::BeginDragDropTarget()) {
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CALIGO_ENTITY")) {
       if (payload->Data != nullptr && payload->DataSize == static_cast<int>(sizeof(id))) {
         const scene::EntityId dragged = *static_cast<const scene::EntityId*>(payload->Data);
@@ -59,7 +59,7 @@ void DrawEntityNode(EditorState& state, scene::EntityId id) {
   }
 
   bool deleted = false;
-  if (ImGui::BeginPopupContextItem("##entity-menu")) {
+  if (!state.play.active && ImGui::BeginPopupContextItem("##entity-menu")) {
     if (ImGui::MenuItem("Criar filha")) {
       SelectEntity(state, id);
       CreateEntity(state);
@@ -97,11 +97,13 @@ void DrawHierarchy(EditorState& state) {
     return;
   }
 
+  ImGui::BeginDisabled(state.play.active);
   if (ImGui::Button("+ Entidade")) {
     CreateEntity(state);
   }
+  ImGui::EndDisabled();
   ImGui::SameLine();
-  ImGui::BeginDisabled(state.selected == scene::kNoEntity);
+  ImGui::BeginDisabled(state.selected == scene::kNoEntity || state.play.active);
   if (ImGui::Button("Excluir")) {
     DeleteSelectedEntity(state);
   }

@@ -1,6 +1,6 @@
 # Caligo — Registro de Decisões
 
-Versão 0.3
+Versão 0.4
 
 ## Como funciona
 
@@ -33,9 +33,12 @@ Toda decisão tem ID, status e consequência. `FIXO` só muda por RFC em `docs/r
 | D-023 | FIXO | Código proprietário; repositório público apenas para o CI gratuito. | O limite de minutos do CI privado impede o fluxo de validação. | Todo direito é reservado; visibilidade pública não concede licença. |
 | D-024 | FIXO | JSON de cena e de ferramentas usa nlohmann/json 3.12.0. | Biblioteca header-only, sem dependência de toolchain extra, com tag fixa. | Parsing e gravação ficam restritos a cena e ferramentas; o runtime lê apenas o contêiner cozido. |
 | D-025 | FIXO | Coordenadas canhotas, com +X à direita, +Y para cima e +Z para frente. | Direct3D 11 e DirectXMath já usam essa convenção; evita conversão por frame. | O espaço de visão tem Z positivo à frente; importadores convertem ativos de fontes destras. |
+| D-026 | FIXO | Play-in-editor usa snapshot, tick fixo de 60 Hz, pausa e avanço de quadro. | A autoria precisa ficar isolada da simulação. | Parar restaura o snapshot; edição, salvamento e gizmo ficam bloqueados durante a execução. |
+| D-027 | FIXO | Hospedagem de script framework-dependent com runtime .NET privado no artefato, contexto coletável e shadow copy. | O editor não pode depender do runtime da máquina nem bloquear os assemblies durante a recarga. | O artefato leva `runtime/dotnet`, `runtime/host` e `runtime/gameplay`; cada execução recria o contexto gerenciado. |
 
 ## Histórico
 
+- **0.4** — registra a D-026 e a D-027: snapshot de play e hospedagem de script com runtime privado.
 - **0.3** — registra a D-025: coordenadas canhotas com Z positivo à frente.
 - **0.2** — registra a D-024 e a biblioteca JSON da stack.
 - **0.1** — registro inicial das decisões D-001 a D-023.

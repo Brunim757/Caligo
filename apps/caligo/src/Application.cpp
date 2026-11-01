@@ -1,5 +1,6 @@
 #include "Application.h"
 
+#include <algorithm>
 #include <atomic>
 #include <caligo/core/JobSystem.h>
 #include <caligo/core/Log.h>
@@ -9,7 +10,10 @@
 #include <caligo/platform/File.h>
 #include <caligo/platform/System.h>
 #include <caligo/platform/Window.h>
+#include <caligo/scene/Scene.h>
+#include <caligo/script/ScriptHost.h>
 #include <charconv>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -18,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace caligo {
 
@@ -25,6 +30,7 @@ namespace {
 
 struct Options {
   bool headless = false;
+  bool scriptSmoke = false;
   bool help = false;
   uint32_t frames = 0;
   LogLevel logLevel = LogLevel::Info;
@@ -78,6 +84,10 @@ Result<Options> ParseOptions(int argc, char** argv) {
       options.headless = true;
       continue;
     }
+    if (argument == "--script-smoke") {
+      options.scriptSmoke = true;
+      continue;
+    }
     if (argument == "--help" || argument == "-h") {
       options.help = true;
       continue;
@@ -123,10 +133,108 @@ void PrintUsage() {
   std::printf("Caligo\n\n");
   std::printf("Usage: caligo [options]\n\n");
   std::printf("  --headless           Run without a window\n");
+  std::printf("  --script-smoke       Validate the managed script runtime\n");
   std::printf("  --frames <count>     Stop after the given number of frames\n");
   std::printf("  --log-level <level>  trace, debug, info, warn, error\n");
   std::printf("  --scene <path>       Open a scene in the editor\n");
   std::printf("  --help               Show this message\n");
+}
+
+int RunScriptSmoke() {
+  const Result<std::filesystem::path> executable = platform::ExecutableDirectory();
+  if (!executable) {
+    CALIGO_LOG_ERROR("script smoke could not locate the executable directory: {}",
+                     executable.GetError().message);
+    return 1;
+  }
+
+  script::ScriptHost host;
+  const Result<void> initialized = host.Initialize(executable.Value());
+  if (!initialized) {
+    CALIGO_LOG_ERROR("script smoke could not start the script host: {}",
+                     initialized.GetError().message);
+    return 2;
+  }
+
+  const Result<std::vector<std::string>> types = host.ScriptTypes();
+  if (!types) {
+    CALIGO_LOG_ERROR("script smoke could not list script types: {}", types.GetError().message);
+    host.Shutdown();
+    return 3;
+  }
+  const std::vector<std::string>& names = types.Value();
+  const auto hasType = [&names](std::string_view name) {
+    return std::find(names.begin(), names.end(), name) != names.end();
+  };
+  if (!hasType("Spinner") || !hasType("PlayerMover")) {
+    CALIGO_LOG_ERROR("script smoke did not find the expected gameplay scripts");
+    host.Shutdown();
+    return 4;
+  }
+
+  scene::Scene scene;
+  const scene::EntityId spinner = scene.CreateEntity("Spinner");
+  const scene::EntityId mover = scene.CreateEntity("Mover");
+  scene::Transform moverTransform;
+  moverTransform.position = math::Vec3{0.0f, 2.5f, 0.0f};
+  if (spinner == scene::kNoEntity || mover == scene::kNoEntity ||
+      !scene.SetTransform(mover, moverTransform) || !scene.AddScript(spinner, "Spinner") ||
+      !scene.AddScript(mover, "PlayerMover")) {
+    CALIGO_LOG_ERROR("script smoke could not prepare the scene");
+    host.Shutdown();
+    return 5;
+  }
+
+  const Result<void> started = host.BeginPlay(scene);
+  if (!started) {
+    CALIGO_LOG_ERROR("script smoke could not begin play: {}", started.GetError().message);
+    host.Shutdown();
+    return 6;
+  }
+
+  script::ScriptInput input;
+  input.down[static_cast<size_t>(script::ScriptKey::W)] = true;
+  host.SetInput(&input);
+
+  constexpr float kFixedDelta = 1.0f / 60.0f;
+  constexpr int kTicks = 60;
+  for (int tick = 0; tick < kTicks; ++tick) {
+    const Result<void> updated = host.Tick(kFixedDelta);
+    if (!updated) {
+      CALIGO_LOG_ERROR("script smoke failed at tick {}: {}", tick, updated.GetError().message);
+      host.EndPlay();
+      host.SetInput(nullptr);
+      host.Shutdown();
+      return 7;
+    }
+  }
+
+  host.EndPlay();
+  host.SetInput(nullptr);
+  host.Shutdown();
+
+  const scene::Entity* spinned = scene.Find(spinner);
+  const scene::Entity* moved = scene.Find(mover);
+  if (spinned == nullptr || moved == nullptr) {
+    CALIGO_LOG_ERROR("script smoke lost its entities");
+    return 8;
+  }
+  if (std::abs(spinned->transform.rotation.y) < 0.5f) {
+    CALIGO_LOG_ERROR("script smoke did not observe the spinner rotation");
+    return 9;
+  }
+  if (std::abs(moved->transform.position.z - 4.0f) > 0.05f) {
+    CALIGO_LOG_ERROR("script smoke observed an unexpected player position: {}",
+                     moved->transform.position.z);
+    return 10;
+  }
+  if (std::abs(moved->transform.position.y - 2.5f) > 0.001f) {
+    CALIGO_LOG_ERROR("script smoke changed the player height");
+    return 11;
+  }
+
+  CALIGO_LOG_INFO("script smoke complete: {} types, {} ticks", names.size(), kTicks);
+  return 0;
 }
 
 int RunHeadless(JobSystem& jobs, uint32_t frames) {
@@ -240,7 +348,9 @@ int RunApplication(int argc, char** argv) {
   jobs.Initialize();
 
   int result = 0;
-  if (options.headless) {
+  if (options.scriptSmoke) {
+    result = RunScriptSmoke();
+  } else if (options.headless) {
     result = RunHeadless(jobs, options.frames == 0 ? 120 : options.frames);
   } else {
     result = RunWindowed(options);

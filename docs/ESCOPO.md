@@ -2,7 +2,7 @@
 
 > Engine de mundo aberto estilizado. Windows. Cidade densa e natureza estilizada. Nada além.
 
-Versão 0.6
+Versão 0.7
 
 ## 1. Identidade
 
@@ -51,6 +51,8 @@ Estas decisões não mudam sem RFC. A regra está na seção 11.
 | D-023 | Código proprietário; repositório público apenas para o CI gratuito | FIXO |
 | D-024 | JSON de cena e ferramentas: nlohmann/json 3.12.0 | FIXO |
 | D-025 | Coordenadas canhotas, com +X à direita, +Y para cima e +Z para frente | FIXO |
+| D-026 | Play-in-editor usa snapshot, tick fixo de 60 Hz, pausa e avanço de quadro | FIXO |
+| D-027 | Hospedagem de script framework-dependent com runtime .NET privado, contexto coletável e shadow copy | FIXO |
 
 ## 3. Não-objetivos
 
@@ -74,7 +76,7 @@ Caligo não é e não tenta ser:
 
 **Build:** CMake + Ninja. Dependências por FetchContent com tag fixa. Sem vcpkg.
 
-**Script:** .NET 10 LTS. Runtime self-contained no build de distribuição.
+**Script:** .NET 10 LTS. Runtime privado no artefato; hospedagem framework-dependent com contexto coletável.
 
 **Hardware:**
 
@@ -124,7 +126,7 @@ Módulos, com dependência apenas para baixo. O grafo completo, os contratos e a
 
 **Assets:** fonte em `assets/`, cozido em `cooked/`. GUID por asset, hash da fonte, cook incremental. O runtime só lê cozido.
 
-**Script:** assembly `Caligo.Gameplay`. ABI C curada, wrappers C# escritos à mão no início, geração automática quando a superfície crescer. Hot reload por AssemblyLoadContext coletável. Sem scripts, a engine roda igual.
+**Script:** assembly `Caligo.Gameplay`. ABI C curada, wrappers C# escritos à mão no início, geração automática quando a superfície crescer. Host `hostfxr` com runtime .NET privado, contexto coletável e shadow copy para recarga. Sem scripts, a engine roda igual.
 
 **Determinismo:** simulação em tick fixo de 60 Hz, render interpolado.
 
@@ -250,3 +252,4 @@ O objetivo não é congelar a engine. É impedir que uma decisão fechada seja r
 - **0.4** — código proprietário; repositório público apenas para o CI gratuito.
 - **0.5** — nlohmann/json 3.12.0 como biblioteca JSON da cena e das ferramentas.
 - **0.6** — coordenadas canhotas com +X à direita, +Y para cima e +Z para frente.
+- **0.7** — snapshot de play e hospedagem de script com runtime privado, contexto coletável e shadow copy.

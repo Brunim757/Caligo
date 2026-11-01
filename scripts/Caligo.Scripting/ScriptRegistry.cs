@@ -26,7 +26,13 @@ public sealed class ScriptRegistry
     {
       throw new InvalidOperationException($"script '{name}' is already registered");
     }
-    _factories.Add(name, () => new T());
+    Func<ScriptBehaviour> factory = () => new T();
+    _factories.Add(name, factory);
+    string? fullName = typeof(T).FullName;
+    if (!string.IsNullOrEmpty(fullName) && !string.Equals(fullName, name, StringComparison.Ordinal))
+    {
+      _factories.Add(fullName, factory);
+    }
     _names.Add(name);
     _names.Sort(StringComparer.Ordinal);
   }

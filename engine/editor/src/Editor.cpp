@@ -104,6 +104,19 @@ Result<void> Editor::Initialize(platform::Window& window, const std::filesystem:
   window.SetMessageHandler(&HandleWindowMessage, m_state.get());
   window.SetCloseHandler(&HandleWindowClose, m_state.get());
 
+  const Result<std::filesystem::path> executable = platform::ExecutableDirectory();
+  if (executable) {
+    const Result<void> scripts = m_state->scriptHost.Initialize(executable.Value());
+    if (scripts) {
+      RefreshScriptTypes(*m_state);
+      CALIGO_LOG_INFO("scripts prontos: {} tipos", m_state->scriptTypes.size());
+    } else {
+      CALIGO_LOG_WARN("scripts indisponíveis: {}", scripts.GetError().message);
+    }
+  } else {
+    CALIGO_LOG_WARN("não foi possível localizar os scripts: {}", executable.GetError().message);
+  }
+
   const std::filesystem::path path = scenePath.empty() ? DefaultScenePath() : scenePath;
   if (path.empty() || !LoadSceneFile(*m_state, path)) {
     NewScene(*m_state);
@@ -143,6 +156,8 @@ bool Editor::Frame() {
     return false;
   }
 
+  UpdatePlay(*m_state);
+
   ImGui_ImplWin32_NewFrame();
   ImGui_ImplDX11_NewFrame();
   ImGui::NewFrame();
@@ -174,6 +189,9 @@ void Editor::Shutdown() noexcept {
   if (m_state == nullptr) {
     return;
   }
+
+  StopPlay(*m_state);
+  m_state->scriptHost.Shutdown();
 
   if (m_state->consoleSink != nullptr) {
     GetLogger().RemoveSink(m_state->consoleSink);

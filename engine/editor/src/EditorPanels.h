@@ -27,6 +27,14 @@ void ExecuteAction(EditorState& state, PendingAction action);
 void ShowError(EditorState& state, std::string title, std::string message);
 void UpdateWindowTitle(EditorState& state);
 
+void RefreshScriptTypes(EditorState& state);
+void StartPlay(EditorState& state);
+void StopPlay(EditorState& state);
+void UpdatePlay(EditorState& state);
+void TogglePlayPause(EditorState& state);
+void RequestPlayStep(EditorState& state);
+void ReloadScripts(EditorState& state);
+
 void ApplyTheme(float dpiScale);
 [[nodiscard]] bool InitializeImGui(EditorState& state);
 void ShutdownImGui(EditorState& state) noexcept;

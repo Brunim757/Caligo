@@ -11,6 +11,7 @@ public static unsafe class HostEntry
   private static ScriptWorld? _world;
   private static INativeBindings? _bindings;
   private static string? _lastError;
+  private static bool _failed;
 
   public static int Initialize(IntPtr nativeBindings, IntPtr gameplayAssemblyPath)
   {
@@ -46,10 +47,13 @@ public static unsafe class HostEntry
       {
         throw new InvalidOperationException("GameModule could not be created");
       }
-      _bindings = new NativeBindingsAdapter(*(NativeBindings*)nativeBindings);
+      INativeBindings bindings = new NativeBindingsAdapter(*(NativeBindings*)nativeBindings);
+      _bindings = bindings;
       ScriptRegistry registry = new();
       module.Configure(registry);
       _registry = registry;
+      _world = new ScriptWorld(registry, bindings);
+      _failed = false;
       _lastError = null;
       return 0;
     }
@@ -61,22 +65,26 @@ public static unsafe class HostEntry
 
   public static int GetScriptTypeCount()
   {
-    return _registry?.Names.Count ?? 0;
+    try
+    {
+      return RequireRegistry().Names.Count;
+    }
+    catch (Exception exception)
+    {
+      return Fail(exception);
+    }
   }
 
   public static int GetScriptTypeName(int index, IntPtr buffer, int capacity)
   {
     try
     {
-      if (_registry == null)
-      {
-        throw new InvalidOperationException("script host is not initialized");
-      }
-      if (index < 0 || index >= _registry.Names.Count)
+      ScriptRegistry registry = RequireRegistry();
+      if (index < 0 || index >= registry.Names.Count)
       {
         throw new ArgumentOutOfRangeException(nameof(index));
       }
-      return WriteUtf8(_registry.Names[index], buffer, capacity);
+      return WriteUtf8(registry.Names[index], buffer, capacity);
     }
     catch (Exception exception)
     {
@@ -88,17 +96,13 @@ public static unsafe class HostEntry
   {
     try
     {
-      if (_registry == null || _bindings == null)
-      {
-        throw new InvalidOperationException("script host is not initialized");
-      }
+      ScriptWorld world = RequireWorld();
       if (typeName == IntPtr.Zero || length <= 0)
       {
         throw new ArgumentException("script type is empty", nameof(typeName));
       }
       string type = Encoding.UTF8.GetString(new ReadOnlySpan<byte>((void*)typeName, length));
-      _world ??= new ScriptWorld(_registry, _bindings);
-      _world.Create(entityId, type);
+      world.Create(entityId, type);
       return 0;
     }
     catch (Exception exception)
@@ -111,7 +115,7 @@ public static unsafe class HostEntry
   {
     try
     {
-      _world?.Start();
+      RequireWorld().Start();
       return 0;
     }
     catch (Exception exception)
@@ -124,7 +128,7 @@ public static unsafe class HostEntry
   {
     try
     {
-      _world?.Update(deltaSeconds);
+      RequireWorld().Update(deltaSeconds);
       return 0;
     }
     catch (Exception exception)
@@ -138,7 +142,6 @@ public static unsafe class HostEntry
     try
     {
       _world?.Stop();
-      _world = null;
       return 0;
     }
     catch (Exception exception)
@@ -156,6 +159,7 @@ public static unsafe class HostEntry
       _registry = null;
       _bindings = null;
       _lastError = null;
+      _failed = false;
       return 0;
     }
     catch (Exception exception)
@@ -169,9 +173,24 @@ public static unsafe class HostEntry
     return WriteUtf8(_lastError ?? string.Empty, buffer, capacity);
   }
 
+  private static ScriptRegistry RequireRegistry()
+  {
+    return _registry ?? throw new InvalidOperationException("script host is not initialized");
+  }
+
+  private static ScriptWorld RequireWorld()
+  {
+    if (_failed)
+    {
+      throw new InvalidOperationException(_lastError ?? "script host failed");
+    }
+    return _world ?? throw new InvalidOperationException("script host is not initialized");
+  }
+
   private static int Fail(Exception exception)
   {
     _lastError = exception.Message;
+    _failed = true;
     if (_world != null)
     {
       try

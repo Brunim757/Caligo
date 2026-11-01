@@ -28,11 +28,18 @@ jobs:
         with:
           python-version: "3.13"
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
       - name: Install clang-format
         run: python -m pip install clang-format==21.1.8
 
       - name: Check sources
         run: python tools/check_source.py
+
+      - name: Managed tests
+        run: dotnet run --project scripts/Caligo.Gameplay.Tests/Caligo.Gameplay.Tests.csproj -c ${{ matrix.config }}
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.config }}
@@ -52,6 +59,7 @@ jobs:
           $stage = "stage/caligo-windows-${{ matrix.config }}"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item "build/bin/${{ matrix.config }}/caligo.exe" -Destination $stage
+          Copy-Item -Recurse "build/bin/${{ matrix.config }}/runtime" -Destination $stage
           Copy-Item -Recurse "content" -Destination $stage
           Copy-Item "LICENSE", "README.md" -Destination $stage
           Get-ChildItem "build/bin/${{ matrix.config }}/*.pdb" -ErrorAction SilentlyContinue | Copy-Item -Destination $stage

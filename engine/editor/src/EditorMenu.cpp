@@ -23,6 +23,30 @@ void HandleShortcuts(EditorState& state) {
     return;
   }
 
+  if (ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
+    if (state.play.active) {
+      StopPlay(state);
+    } else {
+      StartPlay(state);
+    }
+    return;
+  }
+  if (ImGui::IsKeyPressed(ImGuiKey_F6, false)) {
+    TogglePlayPause(state);
+    return;
+  }
+  if (ImGui::IsKeyPressed(ImGuiKey_F7, false)) {
+    RequestPlayStep(state);
+    return;
+  }
+  if (ImGui::IsKeyPressed(ImGuiKey_F8, false)) {
+    ReloadScripts(state);
+    return;
+  }
+  if (state.play.active) {
+    return;
+  }
+
   if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
     static_cast<void>(SaveScene(state, true));
     return;
@@ -76,6 +100,7 @@ void DrawFileMenu(EditorState& state) {
   if (!ImGui::BeginMenu("Arquivo")) {
     return;
   }
+  ImGui::BeginDisabled(state.play.active);
   if (ImGui::MenuItem("Nova cena", "Ctrl+N")) {
     RequestAction(state, PendingAction::NewScene);
   }
@@ -89,6 +114,7 @@ void DrawFileMenu(EditorState& state) {
   if (ImGui::MenuItem("Salvar como...", "Ctrl+Shift+S")) {
     static_cast<void>(SaveScene(state, true));
   }
+  ImGui::EndDisabled();
   ImGui::Separator();
   if (ImGui::MenuItem("Sair", "Ctrl+Q")) {
     RequestAction(state, PendingAction::Quit);
@@ -100,11 +126,39 @@ void DrawEditMenu(EditorState& state) {
   if (!ImGui::BeginMenu("Editar")) {
     return;
   }
+  ImGui::BeginDisabled(state.play.active);
   if (ImGui::MenuItem("Criar entidade", "Ctrl+Shift+N")) {
     CreateEntity(state);
   }
   if (ImGui::MenuItem("Excluir entidade", "Delete", false, state.selected != scene::kNoEntity)) {
     DeleteSelectedEntity(state);
+  }
+  ImGui::EndDisabled();
+  ImGui::EndMenu();
+}
+
+void DrawRunMenu(EditorState& state) {
+  if (!ImGui::BeginMenu("Executar")) {
+    return;
+  }
+  if (ImGui::MenuItem(state.play.active ? "Parar" : "Iniciar", "F5")) {
+    if (state.play.active) {
+      StopPlay(state);
+    } else {
+      StartPlay(state);
+    }
+  }
+  ImGui::BeginDisabled(!state.play.active);
+  if (ImGui::MenuItem(state.play.paused ? "Continuar" : "Pausar", "F6")) {
+    TogglePlayPause(state);
+  }
+  if (ImGui::MenuItem("Avançar um quadro", "F7", false, state.play.paused)) {
+    RequestPlayStep(state);
+  }
+  ImGui::EndDisabled();
+  ImGui::Separator();
+  if (ImGui::MenuItem("Recarregar scripts", "F8")) {
+    ReloadScripts(state);
   }
   ImGui::EndMenu();
 }
@@ -224,6 +278,7 @@ void DrawMainMenu(EditorState& state) {
   }
   DrawFileMenu(state);
   DrawEditMenu(state);
+  DrawRunMenu(state);
   DrawViewMenu(state);
   DrawHelpMenu(state);
 

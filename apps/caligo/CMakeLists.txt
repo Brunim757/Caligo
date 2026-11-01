@@ -3,7 +3,10 @@ add_executable(caligo
   src/Application.cpp
 )
 
-target_link_libraries(caligo PRIVATE caligo_editor caligo_platform)
+add_dependencies(caligo caligo_scripts)
+caligo_copy_scripts(caligo)
+
+target_link_libraries(caligo PRIVATE caligo_editor caligo_platform caligo_script)
 
 target_compile_definitions(caligo PRIVATE
   CALIGO_VERSION="${PROJECT_VERSION}"

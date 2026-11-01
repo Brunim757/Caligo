@@ -83,14 +83,14 @@
     },
     {
       "id": 7,
-      "name": "Poste",
+      "name": "Cubo Giratório",
       "parent": 1,
       "components": [
         {
           "type": "caligo.transform",
-          "position": [3.0, 2.5, -3.0],
+          "position": [3.0, 1.0, -3.0],
           "rotation": [0.0, 0.0, 0.0, 1.0],
-          "scale": [0.2, 5.0, 0.2]
+          "scale": [1.6, 1.6, 1.6]
         },
         {
           "type": "caligo.script",
