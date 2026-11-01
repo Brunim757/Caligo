@@ -2,7 +2,7 @@
 
 > Engine de mundo aberto estilizado. Windows. Cidade densa e natureza estilizada. Nada além.
 
-Versão 0.7
+Versão 0.8
 
 ## 1. Identidade
 
@@ -53,6 +53,7 @@ Estas decisões não mudam sem RFC. A regra está na seção 11.
 | D-025 | Coordenadas canhotas, com +X à direita, +Y para cima e +Z para frente | FIXO |
 | D-026 | Play-in-editor usa snapshot, tick fixo de 60 Hz, pausa e avanço de quadro | FIXO |
 | D-027 | Hospedagem de script framework-dependent com runtime .NET privado, contexto coletável e shadow copy | FIXO |
+| D-028 | Projeto como descritor de conteúdo, com raiz, cena inicial e assembly de gameplay próprios | FIXO |
 
 ## 3. Não-objetivos
 
@@ -172,6 +173,7 @@ Módulos, com dependência apenas para baixo. O grafo completo, os contratos e a
 ### Ferramentas
 
 - Editor com viewport, hierarquia, inspetor, asset browser, console e profiler.
+- Projetos com raiz de conteúdo, cena inicial e assembly próprios, criados e alternados pelo editor.
 - Prefabs, undo/redo e multi-seleção.
 - Play-in-editor com hot reload de C# e assets.
 - Cook e build por linha de comando.
@@ -252,4 +254,5 @@ O objetivo não é congelar a engine. É impedir que uma decisão fechada seja r
 - **0.4** — código proprietário; repositório público apenas para o CI gratuito.
 - **0.5** — nlohmann/json 3.12.0 como biblioteca JSON da cena e das ferramentas.
 - **0.6** — coordenadas canhotas com +X à direita, +Y para cima e +Z para frente.
+- **0.8** — projeto como descritor de conteúdo, com raiz, cena inicial e assembly de gameplay próprios.
 - **0.7** — snapshot de play e hospedagem de script com runtime privado, contexto coletável e shadow copy.
