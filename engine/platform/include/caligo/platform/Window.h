@@ -20,6 +20,9 @@ class Window final {
 public:
   struct Impl;
 
+  using MessageHandler = bool (*)(void* user, uint32_t message, uintptr_t wParam, intptr_t lParam);
+  using CloseHandler = bool (*)(void* user);
+
   Window();
   ~Window();
 
@@ -45,6 +48,8 @@ public:
 
   void SetTitle(std::string_view title);
   void SetCursorVisible(bool visible) noexcept;
+  void SetMessageHandler(MessageHandler handler, void* user) noexcept;
+  void SetCloseHandler(CloseHandler handler, void* user) noexcept;
 
 private:
   std::unique_ptr<Impl> m_impl;

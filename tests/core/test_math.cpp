@@ -1,4 +1,5 @@
 #include <caligo/core/Math.h>
+#include <cmath>
 #include <doctest/doctest.h>
 
 TEST_CASE("math vector operations") {
@@ -65,4 +66,52 @@ TEST_CASE("math matrix identity and multiplication") {
   CHECK(product._11 == doctest::Approx(1.0f));
   CHECK(product._44 == doctest::Approx(1.0f));
   CHECK(product._12 == doctest::Approx(0.0f));
+}
+
+TEST_CASE("math transform composition decomposes") {
+  const caligo::math::Vec3 position{3.0f, -2.0f, 7.5f};
+  const caligo::math::Quat rotation =
+      caligo::math::RotationFromEulerDegrees(caligo::math::Vec3{18.0f, -42.0f, 9.0f});
+  const caligo::math::Vec3 scale{1.5f, 2.0f, 0.75f};
+  const caligo::math::Mat4 matrix = caligo::math::ComposeTransform(position, rotation, scale);
+
+  caligo::math::Vec3 decomposedPosition{};
+  caligo::math::Quat decomposedRotation{};
+  caligo::math::Vec3 decomposedScale{};
+  REQUIRE(caligo::math::DecomposeTransform(matrix, decomposedPosition, decomposedRotation,
+                                           decomposedScale));
+  CHECK(decomposedPosition.x == doctest::Approx(position.x));
+  CHECK(decomposedPosition.y == doctest::Approx(position.y));
+  CHECK(decomposedPosition.z == doctest::Approx(position.z));
+  CHECK(decomposedScale.x == doctest::Approx(scale.x));
+  CHECK(decomposedScale.y == doctest::Approx(scale.y));
+  CHECK(decomposedScale.z == doctest::Approx(scale.z));
+
+  const float dot = rotation.x * decomposedRotation.x + rotation.y * decomposedRotation.y +
+                    rotation.z * decomposedRotation.z + rotation.w * decomposedRotation.w;
+  CHECK(std::abs(dot) == doctest::Approx(1.0f));
+
+  const caligo::math::Vec3 transformed =
+      caligo::math::TransformPoint(matrix, caligo::math::Vec3{0.0f, 0.0f, 0.0f});
+  CHECK(transformed.x == doctest::Approx(position.x));
+  CHECK(transformed.y == doctest::Approx(position.y));
+  CHECK(transformed.z == doctest::Approx(position.z));
+}
+
+TEST_CASE("math view matrix places the target in front") {
+  const caligo::math::Mat4 view = caligo::math::LookAt(caligo::math::Vec3{0.0f, 0.0f, 5.0f},
+                                                       caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                                       caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+  const caligo::math::Vec3 origin =
+      caligo::math::TransformPoint(view, caligo::math::Vec3{0.0f, 0.0f, 0.0f});
+  CHECK(origin.x == doctest::Approx(0.0f));
+  CHECK(origin.y == doctest::Approx(0.0f));
+  CHECK(origin.z == doctest::Approx(-5.0f));
+
+  const caligo::math::Vec3 point{2.0f, 3.0f, 4.0f};
+  const caligo::math::Vec3 identityPoint =
+      caligo::math::TransformPoint(caligo::math::Identity(), point);
+  CHECK(identityPoint.x == doctest::Approx(point.x));
+  CHECK(identityPoint.y == doctest::Approx(point.y));
+  CHECK(identityPoint.z == doctest::Approx(point.z));
 }

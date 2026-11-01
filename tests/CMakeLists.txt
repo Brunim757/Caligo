@@ -7,12 +7,21 @@ add_executable(caligo_tests
   core/test_math.cpp
   platform/test_input.cpp
   platform/test_file.cpp
+  scene/test_scene.cpp
+  scene/test_serialization.cpp
+  editor/test_console.cpp
 )
 
 target_link_libraries(caligo_tests PRIVATE
   caligo_core
   caligo_platform
+  caligo_scene
+  caligo_editor
   doctest::doctest
+)
+
+target_compile_definitions(caligo_tests PRIVATE
+  CALIGO_CONTENT_DIR="${CMAKE_SOURCE_DIR}/content"
 )
 
 caligo_configure_target(caligo_tests)

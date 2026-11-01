@@ -64,3 +64,24 @@ TEST_CASE("log level names are stable") {
   CHECK(std::string(caligo::ToString(caligo::LogLevel::Error)) == "ERROR");
   CHECK(std::string(caligo::ToString(caligo::LogLevel::Fatal)) == "FATAL");
 }
+
+TEST_CASE("logger removes individual sinks") {
+  caligo::Logger logger;
+  auto first = std::make_unique<MemorySink>();
+  auto second = std::make_unique<MemorySink>();
+  MemorySink* firstSink = first.get();
+  MemorySink* secondSink = second.get();
+  logger.AddSink(std::move(first));
+  logger.AddSink(std::move(second));
+
+  logger.RemoveSink(firstSink);
+  logger.Write(caligo::LogLevel::Info, "restante");
+  logger.Flush();
+
+  CHECK(secondSink->Lines().size() == 1);
+  CHECK(secondSink->FlushCount() == 1);
+  CHECK(logger.IsEnabled(caligo::LogLevel::Info));
+
+  logger.RemoveSink(secondSink);
+  logger.Write(caligo::LogLevel::Info, "sem destinos");
+}

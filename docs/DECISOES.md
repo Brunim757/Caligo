@@ -1,6 +1,6 @@
 # Caligo — Registro de Decisões
 
-Versão 0.1
+Versão 0.2
 
 ## Como funciona
 
@@ -31,7 +31,9 @@ Toda decisão tem ID, status e consequência. `FIXO` só muda por RFC em `docs/r
 | D-021 | FIXO | Limite rígido de linhas por arquivo, verificado no CI. | Arquivo monolítico é o defeito mais caro de corrigir. | Exceção só por allowlist com motivo; entrada obsoleta quebra o CI. |
 | D-022 | PROVISÓRIO | Limite de 600 linhas em `.cpp` e 400 em `.h`, revisado após a R2. | O número precisa de código real para ser calibrado. | Funções até 80 linhas; tipos até 20 métodos públicos. |
 | D-023 | FIXO | Código proprietário; repositório público apenas para o CI gratuito. | O limite de minutos do CI privado impede o fluxo de validação. | Todo direito é reservado; visibilidade pública não concede licença. |
+| D-024 | FIXO | JSON de cena e de ferramentas usa nlohmann/json 3.12.0. | Biblioteca header-only, sem dependência de toolchain extra, com tag fixa. | Parsing e gravação ficam restritos a cena e ferramentas; o runtime lê apenas o contêiner cozido. |
 
 ## Histórico
 
+- **0.2** — registra a D-024 e a biblioteca JSON da stack.
 - **0.1** — registro inicial das decisões D-001 a D-023.

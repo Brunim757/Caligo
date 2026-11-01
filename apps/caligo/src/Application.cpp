@@ -5,12 +5,11 @@
 #include <caligo/core/Log.h>
 #include <caligo/core/Result.h>
 #include <caligo/core/Time.h>
+#include <caligo/editor/Editor.h>
 #include <caligo/platform/File.h>
-#include <caligo/platform/Input.h>
 #include <caligo/platform/System.h>
 #include <caligo/platform/Window.h>
 #include <charconv>
-#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -18,8 +17,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
-#include <thread>
 #include <utility>
 
 namespace caligo {
@@ -31,7 +28,17 @@ struct Options {
   bool help = false;
   uint32_t frames = 0;
   LogLevel logLevel = LogLevel::Info;
+  std::filesystem::path scenePath;
 };
+
+std::string PathText(const std::filesystem::path& path) {
+  const std::u8string text = path.u8string();
+  return std::string(reinterpret_cast<const char*>(text.data()), text.size());
+}
+
+uint32_t ScaledDimension(uint32_t value, float scale) {
+  return static_cast<uint32_t>(static_cast<float>(value) * scale + 0.5f);
+}
 
 std::optional<uint32_t> ParsePositiveInteger(std::string_view text) {
   uint32_t value = 0;
@@ -99,6 +106,14 @@ Result<Options> ParseOptions(int argc, char** argv) {
       options.logLevel = *level;
       continue;
     }
+    if (argument == "--scene") {
+      ++index;
+      if (index >= argc) {
+        return Error{"--scene requires a path", 6};
+      }
+      options.scenePath = argv[index];
+      continue;
+    }
     return Error{std::format("unknown argument: {}", argument), 5};
   }
   return options;
@@ -110,6 +125,7 @@ void PrintUsage() {
   std::printf("  --headless           Run without a window\n");
   std::printf("  --frames <count>     Stop after the given number of frames\n");
   std::printf("  --log-level <level>  trace, debug, info, warn, error\n");
+  std::printf("  --scene <path>       Open a scene in the editor\n");
   std::printf("  --help               Show this message\n");
 }
 
@@ -149,39 +165,37 @@ int RunHeadless(JobSystem& jobs, uint32_t frames) {
   return 0;
 }
 
-int RunWindowed(uint32_t frames) {
+int RunWindowed(const Options& options) {
   platform::Window window;
+  const float dpiScale = platform::SystemDpiScale();
   const Result<void> created =
-      window.Create(platform::WindowDesc{.title = "Caligo", .width = 1280, .height = 720});
+      window.Create(platform::WindowDesc{.title = "Caligo Editor",
+                                         .width = ScaledDimension(1440, dpiScale),
+                                         .height = ScaledDimension(900, dpiScale)});
   if (!created) {
     CALIGO_LOG_ERROR("could not create window: {}", created.GetError().message);
     return 1;
   }
 
-  Clock clock;
-  FrameTimer timer;
-  uint32_t frameCount = 0;
-  uint64_t tickCount = 0;
-
-  while (!window.ShouldClose()) {
-    window.PollEvents();
-    if (window.GetInput().State().WasKeyPressed(platform::Key::Escape)) {
-      window.RequestClose();
-    }
-
-    const FrameStep step = timer.Advance(clock.DeltaSeconds());
-    tickCount += step.steps;
-    ++frameCount;
-
-    if (frames > 0 && frameCount >= frames) {
-      break;
-    }
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  editor::Editor editor;
+  const Result<void> initialized = editor.Initialize(window, options.scenePath);
+  if (!initialized) {
+    CALIGO_LOG_ERROR("could not start editor: {}", initialized.GetError().message);
+    window.Destroy();
+    return 1;
   }
 
+  uint32_t frameCount = 0;
+  while (!window.ShouldClose() && editor.Frame()) {
+    ++frameCount;
+    if (options.frames > 0 && frameCount >= options.frames) {
+      break;
+    }
+  }
+
+  editor.Shutdown();
   window.Destroy();
-  CALIGO_LOG_INFO("windowed run complete: {} frames, {} ticks", frameCount, tickCount);
+  CALIGO_LOG_INFO("windowed run complete: {} frames", frameCount);
   return 0;
 }
 
@@ -213,7 +227,7 @@ int RunApplication(int argc, char** argv) {
     if (fileSink->IsOpen()) {
       logger.AddSink(std::move(fileSink));
     } else {
-      CALIGO_LOG_WARN("could not open log file {}", logPath.string());
+      CALIGO_LOG_WARN("could not open log file {}", PathText(logPath));
     }
   } else {
     CALIGO_LOG_WARN("could not resolve executable directory: {}",
@@ -229,7 +243,7 @@ int RunApplication(int argc, char** argv) {
   if (options.headless) {
     result = RunHeadless(jobs, options.frames == 0 ? 120 : options.frames);
   } else {
-    result = RunWindowed(options.frames);
+    result = RunWindowed(options);
   }
 
   jobs.Shutdown();

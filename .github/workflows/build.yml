@@ -46,6 +46,23 @@ jobs:
       - name: Headless smoke
         run: build/bin/${{ matrix.config }}/caligo.exe --headless --frames 120
 
+      - name: Package
+        shell: pwsh
+        run: |
+          $stage = "stage/caligo-windows-${{ matrix.config }}"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "build/bin/${{ matrix.config }}/caligo.exe" -Destination $stage
+          Copy-Item -Recurse "content" -Destination $stage
+          Copy-Item "LICENSE", "README.md" -Destination $stage
+          Get-ChildItem "build/bin/${{ matrix.config }}/*.pdb" -ErrorAction SilentlyContinue | Copy-Item -Destination $stage
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: caligo-windows-${{ matrix.config }}
+          path: stage/caligo-windows-${{ matrix.config }}
+          if-no-files-found: error
+
       - name: Upload logs
         if: failure()
         uses: actions/upload-artifact@v4

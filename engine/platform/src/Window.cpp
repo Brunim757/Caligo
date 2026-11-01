@@ -20,6 +20,10 @@ struct Window::Impl {
   uint32_t width = 0;
   uint32_t height = 0;
   float dpiScale = 1.0f;
+  MessageHandler messageHandler = nullptr;
+  void* messageHandlerUser = nullptr;
+  CloseHandler closeHandler = nullptr;
+  void* closeHandlerUser = nullptr;
 };
 
 namespace {
@@ -93,8 +97,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPara
     return DefWindowProcW(hwnd, message, wParam, lParam);
   }
 
+  if (impl->messageHandler != nullptr &&
+      impl->messageHandler(impl->messageHandlerUser, message, static_cast<uintptr_t>(wParam),
+                           static_cast<intptr_t>(lParam))) {
+    return 0;
+  }
+
   switch (message) {
   case WM_CLOSE:
+    if (impl->closeHandler != nullptr && !impl->closeHandler(impl->closeHandlerUser)) {
+      return 0;
+    }
     DestroyWindow(hwnd);
     return 0;
   case WM_DESTROY:
@@ -314,6 +327,10 @@ void Window::Destroy() noexcept {
 
   m_impl->input.Reset();
   m_impl->shouldClose = true;
+  m_impl->messageHandler = nullptr;
+  m_impl->messageHandlerUser = nullptr;
+  m_impl->closeHandler = nullptr;
+  m_impl->closeHandlerUser = nullptr;
 }
 
 void Window::PollEvents() {
@@ -330,6 +347,10 @@ void Window::PollEvents() {
     }
     TranslateMessage(&message);
     DispatchMessageW(&message);
+  }
+
+  if (!m_impl->shouldClose && IsIconic(m_impl->hwnd) != FALSE) {
+    WaitMessage();
   }
 }
 
@@ -387,6 +408,16 @@ void Window::SetCursorVisible(bool visible) noexcept {
   if (m_impl->hwnd != nullptr) {
     SetCursor(visible ? LoadCursorW(nullptr, IDC_ARROW) : nullptr);
   }
+}
+
+void Window::SetMessageHandler(MessageHandler handler, void* user) noexcept {
+  m_impl->messageHandler = handler;
+  m_impl->messageHandlerUser = user;
+}
+
+void Window::SetCloseHandler(CloseHandler handler, void* user) noexcept {
+  m_impl->closeHandler = handler;
+  m_impl->closeHandlerUser = user;
 }
 
 }

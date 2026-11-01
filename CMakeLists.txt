@@ -31,6 +31,9 @@ include(cmake/ThirdParty.cmake)
 
 add_subdirectory(engine/core)
 add_subdirectory(engine/platform)
+add_subdirectory(engine/scene)
+add_subdirectory(engine/render)
+add_subdirectory(engine/editor)
 add_subdirectory(apps/caligo)
 
 if(CALIGO_BUILD_TESTS)

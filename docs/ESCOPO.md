@@ -2,7 +2,7 @@
 
 > Engine de mundo aberto estilizado. Windows. Cidade densa e natureza estilizada. Nada além.
 
-Versão 0.4
+Versão 0.5
 
 ## 1. Identidade
 
@@ -49,6 +49,7 @@ Estas decisões não mudam sem RFC. A regra está na seção 11.
 | D-021 | Limite rígido de linhas por arquivo, verificado no CI | FIXO |
 | D-022 | Valor do limite: 600 linhas em `.cpp`, 400 em `.h`, revisado após a R2 | PROVISÓRIO |
 | D-023 | Código proprietário; repositório público apenas para o CI gratuito | FIXO |
+| D-024 | JSON de cena e ferramentas: nlohmann/json 3.12.0 | FIXO |
 
 ## 3. Não-objetivos
 
@@ -91,6 +92,7 @@ Caligo não é e não tenta ser:
 | Jobs | enkiTS |
 | Áudio | miniaudio + mixer 3D próprio |
 | Editor | Dear ImGui docking + ImGuizmo |
+| JSON | nlohmann/json 3.12.0 |
 | glTF | cgltf |
 | Imagens | stb + DirectXTex (BCn) |
 | Compressão | zstd |

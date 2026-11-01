@@ -1,6 +1,6 @@
 # Caligo — Formatos
 
-Versão 0.1
+Versão 0.2
 
 ## 1. Princípio
 
@@ -57,7 +57,7 @@ Regras:
 - `guid` identifica a cena; `id` identifica a entidade dentro dela.
 - Todo componente tem `type` estável, nunca o nome de uma classe C++.
 - Transform é obrigatório em toda entidade; ausência é erro de cook.
-- Componentes desconhecidos preservam os dados e falham com diagnóstico, nunca são descartados em silêncio.
+- Componentes desconhecidos nunca são descartados em silêncio: a carga falha com diagnóstico e o cook preserva os dados para uma versão que os entenda.
 - A ordem das entidades não importa na origem; o cook ordena por `id`.
 - Prefab é uma cena com uma raiz marcada e é instanciado no cook, não no runtime.
 
@@ -137,4 +137,5 @@ O carregamento é direto: o bloco vira memória imutável e as consultas usam os
 
 ## 12. Histórico
 
+- **0.2** — a carga da cena rejeita componentes desconhecidos com diagnóstico; a preservação fica no cook.
 - **0.1** — formatos de cena, contêiner, malha, textura, áudio, UI e script.

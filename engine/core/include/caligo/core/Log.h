@@ -51,6 +51,7 @@ public:
   Logger() = default;
 
   void AddSink(std::unique_ptr<LogSink> sink);
+  void RemoveSink(LogSink* sink);
   void SetMinimumLevel(LogLevel level) noexcept;
   [[nodiscard]] bool IsEnabled(LogLevel level) const noexcept;
   void Write(LogLevel level, std::string_view message);

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <caligo/core/Assert.h>
 #include <caligo/core/Log.h>
 #include <chrono>
@@ -84,6 +85,17 @@ void Logger::AddSink(std::unique_ptr<LogSink> sink) {
   }
   std::lock_guard<std::mutex> lock(m_mutex);
   m_sinks.push_back(std::move(sink));
+}
+
+void Logger::RemoveSink(LogSink* sink) {
+  if (sink == nullptr) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(m_mutex);
+  m_sinks.erase(
+      std::remove_if(m_sinks.begin(), m_sinks.end(),
+                     [sink](const std::unique_ptr<LogSink>& owned) { return owned.get() == sink; }),
+      m_sinks.end());
 }
 
 void Logger::SetMinimumLevel(LogLevel level) noexcept {

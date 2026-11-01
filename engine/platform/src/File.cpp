@@ -2,6 +2,7 @@
 #include <cstring>
 #include <format>
 #include <fstream>
+#include <string>
 #include <system_error>
 #include <windows.h>
 
@@ -9,8 +10,13 @@ namespace caligo::platform {
 
 namespace {
 
+std::string PathText(const std::filesystem::path& path) {
+  const std::u8string text = path.u8string();
+  return std::string(reinterpret_cast<const char*>(text.data()), text.size());
+}
+
 Error FileError(const std::filesystem::path& path, std::string_view action) {
-  return Error{std::format("{}: {}", action, path.string()), 1};
+  return Error{std::format("{}: {}", action, PathText(path)), 1};
 }
 
 std::string WindowsErrorMessage(DWORD error) {
@@ -74,7 +80,7 @@ Result<void> WriteBinaryFile(const std::filesystem::path& path, std::span<const 
   if (path.has_parent_path()) {
     std::filesystem::create_directories(path.parent_path(), error);
     if (error) {
-      return Error{std::format("could not create directory {}: {}", path.parent_path().string(),
+      return Error{std::format("could not create directory {}: {}", PathText(path.parent_path()),
                                error.message()),
                    1};
     }
