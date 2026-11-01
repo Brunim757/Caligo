@@ -160,6 +160,9 @@ void RequestAction(EditorState& state, PendingAction action) {
   if (action == PendingAction::None) {
     return;
   }
+  if (state.play.active) {
+    StopPlay(state);
+  }
   if (IsDirty(state)) {
     state.pendingAction = action;
     state.discardPopupRequested = true;

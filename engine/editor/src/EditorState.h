@@ -95,7 +95,7 @@ struct EditorState {
 
 [[nodiscard]] inline bool IsDirty(const EditorState& state) noexcept {
   if (state.play.active) {
-    return false;
+    return state.play.snapshot.Revision() != state.savedRevision;
   }
   return state.scene.Revision() != state.savedRevision;
 }

@@ -45,6 +45,9 @@ bool HandleWindowClose(void* user) {
   if (state->allowClose) {
     return true;
   }
+  if (state->play.active) {
+    StopPlay(*state);
+  }
   if (IsDirty(*state)) {
     RequestAction(*state, PendingAction::Quit);
     return false;
