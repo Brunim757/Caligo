@@ -2,22 +2,15 @@
 
 #include <caligo/core/Math.h>
 #include <caligo/core/Result.h>
+#include <caligo/render/MeshGeometry.h>
 #include <cstdint>
 #include <memory>
 #include <span>
 
 namespace caligo::render {
 
-class RhiBuffer;
 class RhiDevice;
 struct RenderItem;
-
-struct ShadowMesh {
-  const RhiBuffer* vertices = nullptr;
-  uint32_t vertexStride = 0;
-  const RhiBuffer* indices = nullptr;
-  uint32_t indexCount = 0;
-};
 
 class ShadowMap final {
 public:
@@ -31,7 +24,7 @@ public:
   ShadowMap(ShadowMap&&) = delete;
   ShadowMap& operator=(ShadowMap&&) = delete;
 
-  [[nodiscard]] Result<void> Render(RhiDevice& device, const ShadowMesh& mesh,
+  [[nodiscard]] Result<void> Render(RhiDevice& device, const MeshGeometry& mesh,
                                     std::span<const RenderItem> items,
                                     const math::Vec3& lightDirection);
   [[nodiscard]] void* ResourceView() const noexcept;

@@ -200,7 +200,7 @@ ShadowMap::ShadowMap() : m_impl(std::make_unique<Impl>()) {}
 
 ShadowMap::~ShadowMap() = default;
 
-Result<void> ShadowMap::Render(RhiDevice& device, const ShadowMesh& mesh,
+Result<void> ShadowMap::Render(RhiDevice& device, const MeshGeometry& mesh,
                                std::span<const RenderItem> items,
                                const math::Vec3& lightDirection) {
   m_impl->hasContent = false;

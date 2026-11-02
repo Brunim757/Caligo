@@ -1,6 +1,9 @@
 #include <windows.h>
 
 #include "RenderPassUtil.h"
+#include <caligo/render/GBufferPass.h>
+#include <caligo/render/LightingPass.h>
+#include <caligo/render/MeshGeometry.h>
 #include <caligo/render/PostProcessor.h>
 #include <caligo/render/RhiBuffer.h>
 #include <caligo/render/RhiDevice.h>
@@ -29,6 +32,7 @@ struct MeshVertex {
 constexpr float kHalf = 0.5f;
 constexpr int kGridHalfLines = 10;
 constexpr float kShadowBias = 0.0025f;
+constexpr math::Vec3 kBackground{0.020f, 0.025f, 0.035f};
 
 constexpr MeshVertex kCubeVertices[] = {
     {{-kHalf, -kHalf, kHalf}, {0.0f, 0.0f, 1.0f}},
@@ -61,77 +65,9 @@ constexpr uint16_t kCubeIndices[] = {0,  1,  2,  0,  2,  3,  4,  5,  6,  4,  6, 
                                      8,  9,  10, 8,  10, 11, 12, 13, 14, 12, 14, 15,
                                      16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23};
 
-constexpr RhiVertexElement kBoxElements[] = {
-    {"POSITION", 0, RhiVertexFormat::Float32x3, 0},
-    {"NORMAL", 0, RhiVertexFormat::Float32x3, 12},
-};
-
 constexpr RhiVertexElement kGridElements[] = {
     {"POSITION", 0, RhiVertexFormat::Float32x3, 0},
 };
-
-constexpr char kBoxShader[] = R"(
-cbuffer BoxConstants : register(b0) {
-  row_major float4x4 world;
-  row_major float4x4 viewProjection;
-  row_major float4x4 lightViewProjection;
-  float4 baseColor;
-  float4 lightDirection;
-  float4 lightColor;
-  float4 shadowParams;
-};
-
-Texture2D shadowMap : register(t0);
-SamplerComparisonState shadowSampler : register(s0);
-
-struct BoxInput {
-  float3 position : POSITION;
-  float3 normal : NORMAL;
-};
-
-struct BoxOutput {
-  float4 position : SV_POSITION;
-  float3 normal : NORMAL;
-  float4 shadowPosition : TEXCOORD0;
-};
-
-BoxOutput VsMain(BoxInput input) {
-  BoxOutput output;
-  float4 worldPosition = mul(float4(input.position, 1.0), world);
-  output.position = mul(worldPosition, viewProjection);
-  output.normal = mul(input.normal, (float3x3)world);
-  output.shadowPosition = mul(worldPosition, lightViewProjection);
-  return output;
-}
-
-float4 PsMain(BoxOutput input) : SV_TARGET {
-  float3 normal = normalize(input.normal);
-  float diffuse = saturate(dot(normal, normalize(lightDirection.xyz)));
-
-  float shadow = 1.0;
-  float3 projected = input.shadowPosition.xyz / input.shadowPosition.w;
-  float2 uv = float2(projected.x * 0.5 + 0.5, 0.5 - projected.y * 0.5);
-  if (projected.z >= 0.0 && projected.z <= 1.0 && uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 &&
-      uv.y <= 1.0) {
-    float reference = projected.z - shadowParams.y;
-    float2 texel = shadowParams.xx;
-    float total = 0.0;
-    [unroll]
-    for (int row = -1; row <= 1; ++row) {
-      [unroll]
-      for (int column = -1; column <= 1; ++column) {
-        total +=
-            shadowMap.SampleCmpLevelZero(shadowSampler, uv + float2(column, row) * texel, reference);
-      }
-    }
-    shadow = total / 9.0;
-  }
-
-  float3 ambient = baseColor.rgb * 0.22;
-  float3 direct = baseColor.rgb * lightColor.rgb * diffuse * shadow;
-  return float4(ambient + direct, 1.0);
-}
-)";
 
 constexpr char kGridShader[] = R"(
 cbuffer GridConstants : register(b0) {
@@ -151,16 +87,6 @@ float4 PsMain() : SV_TARGET {
   return gridColor;
 }
 )";
-
-struct BoxConstants {
-  math::Mat4 world{};
-  math::Mat4 viewProjection{};
-  math::Mat4 lightViewProjection{};
-  float baseColor[4]{0.0f, 0.0f, 0.0f, 1.0f};
-  float lightDirection[4]{0.0f, 0.0f, 0.0f, 0.0f};
-  float lightColor[4]{1.0f, 1.0f, 1.0f, 1.0f};
-  float shadowParams[4]{0.0f, 0.0f, 0.0f, 0.0f};
-};
 
 struct GridConstants {
   math::Mat4 viewProjection{};
@@ -204,23 +130,20 @@ Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
 }
 
 struct SceneRenderer::Impl {
-  std::unique_ptr<RhiShader> boxShader;
   std::unique_ptr<RhiShader> gridShader;
-  std::unique_ptr<RhiInputLayout> boxLayout;
   std::unique_ptr<RhiInputLayout> gridLayout;
-  std::unique_ptr<RhiPipeline> boxPipeline;
   std::unique_ptr<RhiPipeline> gridPipeline;
   std::unique_ptr<RhiBuffer> boxVertices;
   std::unique_ptr<RhiBuffer> boxIndices;
   std::unique_ptr<RhiBuffer> gridVertices;
-  std::unique_ptr<RhiBuffer> boxConstants;
   std::unique_ptr<RhiBuffer> gridConstants;
   ShadowMap shadowMap;
+  GBufferPass gbuffer;
+  LightingPass lighting;
   PostProcessor post;
   TaaRenderer taa;
   std::unique_ptr<RhiTexture> hdrColor;
   std::unique_ptr<RhiTexture> color;
-  std::unique_ptr<RhiTexture> depth;
   uint32_t gridVertexCount = 0;
   uint32_t frameIndex = 0;
   uint32_t width = 0;
@@ -252,55 +175,29 @@ Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
     return color.GetError();
   }
 
-  RhiTextureDesc depthDesc;
-  depthDesc.width = width;
-  depthDesc.height = height;
-  depthDesc.format = RhiFormat::Depth32Float;
-  depthDesc.depthStencil = true;
-  auto depth = RhiTexture::Create(device, depthDesc);
-  if (!depth) {
-    return depth.GetError();
-  }
-
   impl.hdrColor = std::move(hdrColor).Value();
   impl.color = std::move(color).Value();
-  impl.depth = std::move(depth).Value();
   impl.width = width;
   impl.height = height;
   return {};
 }
 
 Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
-  Result<void> shaders = detail::CreateShader(device, kBoxShader, impl.boxShader);
-  if (!shaders) {
-    return shaders.GetError();
-  }
-  shaders = detail::CreateShader(device, kGridShader, impl.gridShader);
+  Result<void> shaders = detail::CreateShader(device, kGridShader, impl.gridShader);
   if (!shaders) {
     return shaders.GetError();
   }
 
-  auto boxLayout = RhiInputLayout::Create(device, *impl.boxShader, kBoxElements);
-  if (!boxLayout) {
-    return boxLayout.GetError();
-  }
   auto gridLayout = RhiInputLayout::Create(device, *impl.gridShader, kGridElements);
   if (!gridLayout) {
     return gridLayout.GetError();
   }
-  impl.boxLayout = std::move(boxLayout).Value();
   impl.gridLayout = std::move(gridLayout).Value();
 
-  RhiPipelineDesc boxDescription;
-  boxDescription.cullBack = false;
-  Result<void> pipelines = detail::CreatePipeline(device, boxDescription, impl.boxPipeline);
-  if (!pipelines) {
-    return pipelines.GetError();
-  }
   RhiPipelineDesc gridDescription;
   gridDescription.cullBack = false;
   gridDescription.depthWrite = false;
-  pipelines = detail::CreatePipeline(device, gridDescription, impl.gridPipeline);
+  Result<void> pipelines = detail::CreatePipeline(device, gridDescription, impl.gridPipeline);
   if (!pipelines) {
     return pipelines.GetError();
   }
@@ -326,30 +223,59 @@ Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
   impl.gridVertices = std::move(gridVertices).Value();
   impl.gridVertexCount = static_cast<uint32_t>(grid.size() / 3);
 
-  auto boxConstants = RhiBuffer::Create(device, RhiBufferKind::Constant, nullptr,
-                                        static_cast<uint32_t>(sizeof(BoxConstants)));
-  if (!boxConstants) {
-    return boxConstants.GetError();
-  }
   auto gridConstants = RhiBuffer::Create(device, RhiBufferKind::Constant, nullptr,
                                          static_cast<uint32_t>(sizeof(GridConstants)));
   if (!gridConstants) {
     return gridConstants.GetError();
   }
-  impl.boxConstants = std::move(boxConstants).Value();
   impl.gridConstants = std::move(gridConstants).Value();
 
   impl.initialized = true;
   return {};
 }
 
-template <typename T>
-void BindVertexBuffer(ID3D11DeviceContext* context, const std::unique_ptr<T>& buffer,
-                      uint32_t stride) {
-  ID3D11Buffer* handle = static_cast<ID3D11Buffer*>(buffer->Handle());
-  UINT bufferStride = static_cast<UINT>(stride);
+Result<void> DrawGrid(RhiDevice& device, SceneRenderer::Impl& impl,
+                      const math::Mat4& viewProjection, uint32_t width, uint32_t height) {
+  auto* context = static_cast<ID3D11DeviceContext*>(device.ContextHandle());
+  auto* targetView = static_cast<ID3D11RenderTargetView*>(impl.hdrColor->RenderTargetView());
+  auto* depthView = static_cast<ID3D11DepthStencilView*>(impl.gbuffer.DepthStencilView());
+  if (context == nullptr || targetView == nullptr || depthView == nullptr) {
+    return Error{"grid pass has no live targets", 1};
+  }
+
+  context->OMSetRenderTargets(1, &targetView, depthView);
+  D3D11_VIEWPORT viewport{};
+  viewport.Width = static_cast<float>(width);
+  viewport.Height = static_cast<float>(height);
+  viewport.MaxDepth = 1.0f;
+  context->RSSetViewports(1, &viewport);
+
+  detail::BindPipeline(context, *impl.gridShader, *impl.gridLayout, *impl.gridPipeline);
+  context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+  ID3D11Buffer* vertexBuffer = static_cast<ID3D11Buffer*>(impl.gridVertices->Handle());
+  UINT stride = static_cast<UINT>(sizeof(float) * 3);
   UINT offset = 0;
-  context->IASetVertexBuffers(0, 1, &handle, &bufferStride, &offset);
+  context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+  context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+  ID3D11Buffer* constantBuffer = static_cast<ID3D11Buffer*>(impl.gridConstants->Handle());
+  context->VSSetConstantBuffers(0, 1, &constantBuffer);
+  context->PSSetConstantBuffers(0, 1, &constantBuffer);
+
+  GridConstants constants;
+  constants.viewProjection = viewProjection;
+  constants.gridColor[0] = 0.20f;
+  constants.gridColor[1] = 0.24f;
+  constants.gridColor[2] = 0.30f;
+  constants.gridColor[3] = 1.0f;
+  const Result<void> updated =
+      impl.gridConstants->Update(device, &constants, static_cast<uint32_t>(sizeof(constants)));
+  if (!updated) {
+    return updated.GetError();
+  }
+  context->Draw(impl.gridVertexCount, 0);
+
+  context->OMSetRenderTargets(0, nullptr, nullptr);
+  return {};
 }
 
 }
@@ -377,36 +303,16 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
     }
   }
 
-  const math::Vec3 lightDirection = SafeLightDirection(light.direction);
+  MeshGeometry mesh;
+  mesh.vertices = m_impl->boxVertices.get();
+  mesh.vertexStride = static_cast<uint32_t>(sizeof(MeshVertex));
+  mesh.indices = m_impl->boxIndices.get();
+  mesh.indexCount = static_cast<uint32_t>(std::size(kCubeIndices));
 
-  ShadowMesh shadowMesh;
-  shadowMesh.vertices = m_impl->boxVertices.get();
-  shadowMesh.vertexStride = static_cast<uint32_t>(sizeof(MeshVertex));
-  shadowMesh.indices = m_impl->boxIndices.get();
-  shadowMesh.indexCount = static_cast<uint32_t>(std::size(kCubeIndices));
-  const Result<void> shadows = m_impl->shadowMap.Render(device, shadowMesh, items, light.direction);
+  const Result<void> shadows = m_impl->shadowMap.Render(device, mesh, items, light.direction);
   if (!shadows) {
     return shadows.GetError();
   }
-  const math::Mat4 lightViewProjection = m_impl->shadowMap.LightViewProjection();
-
-  auto* context = static_cast<ID3D11DeviceContext*>(device.ContextHandle());
-  auto* targetView = static_cast<ID3D11RenderTargetView*>(m_impl->hdrColor->RenderTargetView());
-  auto* depthView = static_cast<ID3D11DepthStencilView*>(m_impl->depth->DepthStencilView());
-  if (context == nullptr || targetView == nullptr || depthView == nullptr) {
-    return Error{"scene renderer has no live targets", 2};
-  }
-
-  context->OMSetRenderTargets(1, &targetView, depthView);
-  D3D11_VIEWPORT viewport{};
-  viewport.Width = static_cast<float>(width);
-  viewport.Height = static_cast<float>(height);
-  viewport.MaxDepth = 1.0f;
-  context->RSSetViewports(1, &viewport);
-
-  const float clear[4] = {0.020f, 0.025f, 0.035f, 1.0f};
-  context->ClearRenderTargetView(targetView, clear);
-  context->ClearDepthStencilView(depthView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
   ++m_impl->frameIndex;
   const float jitterX = (Halton(m_impl->frameIndex, 2) - 0.5f) * 2.0f / static_cast<float>(width);
@@ -417,70 +323,43 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   const math::Mat4 viewProjection = math::Multiply(camera.view, projection);
   const math::Mat4 inverseViewProjection = math::Inverse(viewProjection);
 
-  detail::BindPipeline(context, *m_impl->boxShader, *m_impl->boxLayout, *m_impl->boxPipeline);
-  context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-  BindVertexBuffer(context, m_impl->boxVertices, static_cast<uint32_t>(sizeof(MeshVertex)));
-  context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(m_impl->boxIndices->Handle()),
-                            DXGI_FORMAT_R16_UINT, 0);
-  ID3D11Buffer* boxConstantBuffer = static_cast<ID3D11Buffer*>(m_impl->boxConstants->Handle());
-  context->VSSetConstantBuffers(0, 1, &boxConstantBuffer);
-  context->PSSetConstantBuffers(0, 1, &boxConstantBuffer);
-
-  ID3D11ShaderResourceView* shadowResource =
-      static_cast<ID3D11ShaderResourceView*>(m_impl->shadowMap.ResourceView());
-  ID3D11SamplerState* shadowSampler = static_cast<ID3D11SamplerState*>(m_impl->shadowMap.Sampler());
-  context->PSSetShaderResources(0, 1, &shadowResource);
-  context->PSSetSamplers(0, 1, &shadowSampler);
-
-  for (const RenderItem& item : items) {
-    BoxConstants constants;
-    constants.world = item.world;
-    constants.viewProjection = viewProjection;
-    constants.lightViewProjection = lightViewProjection;
-    constants.baseColor[0] = item.color.x;
-    constants.baseColor[1] = item.color.y;
-    constants.baseColor[2] = item.color.z;
-    constants.baseColor[3] = 1.0f;
-    constants.lightDirection[0] = lightDirection.x;
-    constants.lightDirection[1] = lightDirection.y;
-    constants.lightDirection[2] = lightDirection.z;
-    constants.lightColor[0] = light.color.x;
-    constants.lightColor[1] = light.color.y;
-    constants.lightColor[2] = light.color.z;
-    constants.shadowParams[0] = m_impl->shadowMap.TexelSize();
-    constants.shadowParams[1] = kShadowBias;
-    const Result<void> updated =
-        m_impl->boxConstants->Update(device, &constants, static_cast<uint32_t>(sizeof(constants)));
-    if (!updated) {
-      return updated.GetError();
-    }
-    context->DrawIndexed(static_cast<UINT>(std::size(kCubeIndices)), 0, 0);
+  const Result<void> gbuffer =
+      m_impl->gbuffer.Render(device, mesh, items, viewProjection, width, height);
+  if (!gbuffer) {
+    return gbuffer.GetError();
   }
 
-  detail::BindPipeline(context, *m_impl->gridShader, *m_impl->gridLayout, *m_impl->gridPipeline);
-  context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
-  BindVertexBuffer(context, m_impl->gridVertices, static_cast<uint32_t>(sizeof(float) * 3));
-  context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
-  ID3D11Buffer* gridConstantBuffer = static_cast<ID3D11Buffer*>(m_impl->gridConstants->Handle());
-  context->VSSetConstantBuffers(0, 1, &gridConstantBuffer);
-  context->PSSetConstantBuffers(0, 1, &gridConstantBuffer);
+  LightingInputs lightingInputs;
+  lightingInputs.albedo = m_impl->gbuffer.AlbedoView();
+  lightingInputs.normal = m_impl->gbuffer.NormalView();
+  lightingInputs.depth = m_impl->gbuffer.DepthView();
+  lightingInputs.shadowMap = m_impl->shadowMap.ResourceView();
+  lightingInputs.shadowSampler = m_impl->shadowMap.Sampler();
 
-  GridConstants gridConstants;
-  gridConstants.viewProjection = viewProjection;
-  gridConstants.gridColor[0] = 0.20f;
-  gridConstants.gridColor[1] = 0.24f;
-  gridConstants.gridColor[2] = 0.30f;
-  gridConstants.gridColor[3] = 1.0f;
-  const Result<void> gridUpdated = m_impl->gridConstants->Update(
-      device, &gridConstants, static_cast<uint32_t>(sizeof(gridConstants)));
-  if (!gridUpdated) {
-    return gridUpdated.GetError();
+  LightingSettings lightingSettings;
+  lightingSettings.inverseViewProjection = inverseViewProjection;
+  lightingSettings.lightViewProjection = m_impl->shadowMap.LightViewProjection();
+  lightingSettings.lightDirection = SafeLightDirection(light.direction);
+  lightingSettings.lightColor = light.color;
+  lightingSettings.background = kBackground;
+  lightingSettings.shadowTexel = m_impl->shadowMap.TexelSize();
+  lightingSettings.shadowBias = kShadowBias;
+
+  const Result<void> lighting =
+      m_impl->lighting.Render(device, lightingInputs, lightingSettings,
+                              m_impl->hdrColor->RenderTargetView(), width, height);
+  if (!lighting) {
+    return lighting.GetError();
   }
-  context->Draw(m_impl->gridVertexCount, 0);
 
-  const Result<void> resolved = m_impl->taa.Apply(
-      device, m_impl->hdrColor->ShaderResourceView(), m_impl->depth->ShaderResourceView(),
-      inverseViewProjection, viewProjection, width, height);
+  const Result<void> grid = DrawGrid(device, *m_impl, viewProjection, width, height);
+  if (!grid) {
+    return grid.GetError();
+  }
+
+  const Result<void> resolved =
+      m_impl->taa.Apply(device, m_impl->hdrColor->ShaderResourceView(), m_impl->gbuffer.DepthView(),
+                        inverseViewProjection, viewProjection, width, height);
   if (!resolved) {
     return resolved.GetError();
   }

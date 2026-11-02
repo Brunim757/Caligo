@@ -1,6 +1,8 @@
 add_library(caligo_render STATIC
+  src/GBufferPass.cpp
   src/GraphicsDevice.cpp
   src/ImageDiff.cpp
+  src/LightingPass.cpp
   src/PostProcessor.cpp
   src/RhiBuffer.cpp
   src/RhiDevice.cpp
