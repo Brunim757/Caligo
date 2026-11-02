@@ -204,14 +204,14 @@ Result<void> ShadowMap::Render(RhiDevice& device, const MeshGeometry& mesh,
                                std::span<const RenderItem> items,
                                const math::Vec3& lightDirection) {
   m_impl->hasContent = false;
-  if (items.empty() || mesh.vertices == nullptr || mesh.indices == nullptr) {
-    return {};
-  }
   if (!m_impl->initialized) {
     const Result<void> created = CreateResources(device, *m_impl);
     if (!created) {
       return created.GetError();
     }
+  }
+  if (items.empty() || mesh.vertices == nullptr || mesh.indices == nullptr) {
+    return {};
   }
 
   auto* context = static_cast<ID3D11DeviceContext*>(device.ContextHandle());
