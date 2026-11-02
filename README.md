@@ -6,6 +6,7 @@ Engine de mundo aberto estilizado da Kizuri Studio.
 - Arquitetura: [docs/ARQUITETURA.md](docs/ARQUITETURA.md)
 - Formatos: [docs/FORMATOS.md](docs/FORMATOS.md)
 - Decisões: [docs/DECISOES.md](docs/DECISOES.md)
+- Manual: [docs/manual/README.md](docs/manual/README.md)
 - Scripting e play: [docs/sistemas/SCRIPTING.md](docs/sistemas/SCRIPTING.md)
 - UI de jogo: [docs/sistemas/UI.md](docs/sistemas/UI.md)
 
@@ -17,7 +18,9 @@ Proprietário. Todos os direitos reservados. A visibilidade pública existe apen
 
 R0 — fundação. Núcleo, plataforma, janela, input, log, tempo, jobs, testes e modo headless.
 
-R1 — editor e cena. Esta fatia entrega o editor com hierarquia, inspetor de transformação e scripts, viewport com gizmo, console, abertura e gravação de `.cscene`, scripting C#, play-in-editor com snapshot, pausa e avanço de quadro, tema adaptado a DPI e uma cena de exemplo. Cook entra na próxima fatia da R1.
+R1 — a engine que se usa. Editor com hierarquia, inspetor, viewport com gizmo e console; cena com entidades e hierarquia em `.cscene`; componentes de script em C#; play-in-editor com tick fixo, pausa, avanço de quadro, recarga e restauração por instantâneo; gravação e abertura com proteção contra perda; tema adaptado a DPI, cena de exemplo e manual.
+
+A próxima fatia é a R2 — imagem: render graph, luz, sombra, TAA, pós-processamento, áudio base e testes de imagem.
 
 ## Construir
 
