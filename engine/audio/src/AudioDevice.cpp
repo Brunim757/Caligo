@@ -1,6 +1,6 @@
 #include <windows.h>
 
-#include "Miniaudio.h"
+#include "MiniaudioApi.h"
 #include <caligo/audio/AudioDevice.h>
 #include <memory>
 #include <utility>
