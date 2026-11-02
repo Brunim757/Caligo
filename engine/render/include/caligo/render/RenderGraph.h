@@ -53,7 +53,7 @@ public:
   [[nodiscard]] ResourceId ImportTexture(const RhiTexture& texture);
   [[nodiscard]] ResourceId CreateTexture(const RenderGraphTextureDesc& desc);
 
-  [[nodiscard]] PassId AddPass(PassCallback callback);
+  PassId AddPass(PassCallback callback);
   void Read(PassId pass, ResourceId resource);
   void Write(PassId pass, ResourceId resource);
 
