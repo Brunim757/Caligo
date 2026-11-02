@@ -1,6 +1,6 @@
 # Caligo — Arquitetura
 
-Versão 0.2
+Versão 0.3
 
 ## 1. Princípio
 
@@ -66,7 +66,7 @@ Regras:
 
 ## 6. Organização de arquivos
 
-- Limite rígido por arquivo, verificado no CI: **600 linhas em `.cpp`, 400 em `.h`**. Valores provisórios, revisados após a R2.
+- Limite rígido por arquivo, verificado no CI: **600 linhas em `.cpp`, 400 em `.h`**.
 - Código gerado e tabela de dados pura só excedem o limite por allowlist em `tools/limite_arquivos.txt`, com motivo. Entrada obsoleta quebra o CI.
 - O limite é gatilho de decomposição por responsabilidade, nunca corte por número.
 - Complementos: função com no máximo 80 linhas e tipo com no máximo 20 métodos públicos.

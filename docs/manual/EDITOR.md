@@ -1,6 +1,6 @@
 # Caligo — Manual do editor
 
-Versão 0.1 — R1
+Versão 0.2 — R2
 
 ## 1. Abrir
 
@@ -23,9 +23,11 @@ As áreas podem ser arrastadas e reordenadas. O menu **Exibir → Restaurar layo
 
 ## 3. O que aparece no viewport
 
-Nesta release a cena é desenhada como **caixas de arame**. Cada caixa é o transform de uma entidade: posição, rotação e escala. O chão é uma caixa larga e baixa, um prédio é uma caixa alta, uma janela é uma caixa fina.
+A cena aparece **sombreada**. Cada caixa é o transform de uma entidade: posição, rotação e escala. O chão é uma caixa larga e baixa, um prédio é uma caixa alta, uma janela é uma caixa fina.
 
-Não há malha, material nem luz ainda. A caixa não é um substituto de modelo: ela é a forma do transform, e continua existindo depois que os modelos entrarem, como guia de seleção.
+A cena tem uma **luz direcional** vinda de cima e de lado, com sombra projetada no chão. A cor de cada caixa é neutra por enquanto — não há material por entidade. A imagem é estável em movimento, sem tremor, e passa por correção de brilho e de cor.
+
+A caixa não é um substituto de modelo: ela é a forma do transform, e continua existindo depois que os modelos entrarem, como guia de seleção.
 
 A grade do chão, os marcadores das entidades e a linha até o chão são desenho do editor, não geometria da cena.
 

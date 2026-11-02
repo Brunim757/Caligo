@@ -1,6 +1,6 @@
 # Caligo — Registro de Decisões
 
-Versão 0.7
+Versão 0.8
 
 ## Como funciona
 
@@ -29,7 +29,7 @@ Toda decisão tem ID, status e consequência. `FIXO` só muda por RFC em `docs/r
 | D-019 | PROVISÓRIO | Piso de hardware: FL11_0, 2 GB de VRAM, 8 GB de RAM. | Garante alcance sem sacrificar o alvo. | Pendente de confirmação da GPU de teste do estúdio. |
 | D-020 | FIXO | UI de jogo separada do editor: markup, estilo em folha e binding por view-model. | UI de jogo é conteúdo; ImGui é ferramenta. | Dois sistemas, dois orçamentos, nenhuma dependência cruzada. |
 | D-021 | FIXO | Limite rígido de linhas por arquivo, verificado no CI. | Arquivo monolítico é o defeito mais caro de corrigir. | Exceção só por allowlist com motivo; entrada obsoleta quebra o CI. |
-| D-022 | PROVISÓRIO | Limite de 600 linhas em `.cpp` e 400 em `.h`, revisado após a R2. | O número precisa de código real para ser calibrado. | Funções até 80 linhas; tipos até 20 métodos públicos. |
+| D-022 | FIXO | Limite de 600 linhas em `.cpp` e 400 em `.h`. | A R2 confirmou o valor com código real: nenhum arquivo chegou perto do limite. | Funções até 80 linhas; tipos até 20 métodos públicos. |
 | D-023 | FIXO | Código proprietário; repositório público apenas para o CI gratuito. | O limite de minutos do CI privado impede o fluxo de validação. | Todo direito é reservado; visibilidade pública não concede licença. |
 | D-024 | FIXO | JSON de cena e de ferramentas usa nlohmann/json 3.12.0. | Biblioteca header-only, sem dependência de toolchain extra, com tag fixa. | Parsing e gravação ficam restritos a cena e ferramentas; o runtime lê apenas o contêiner cozido. |
 | D-025 | FIXO | Coordenadas canhotas, com +X à direita, +Y para cima e +Z para frente. | Direct3D 11 e DirectXMath já usam essa convenção; evita conversão por frame. | O espaço de visão tem Z positivo à frente; importadores convertem ativos de fontes destras. |
@@ -40,6 +40,7 @@ Toda decisão tem ID, status e consequência. `FIXO` só muda por RFC em `docs/r
 
 ## Histórico
 
+- **0.8** — confirma o limite de arquivo da D-022 como fixo, depois da R2.
 - **0.7** — corrige a fronteira do Tônus: módulo próprio acima de animação e física, porque a pose tem um dono só.
 - **0.6** — registra a D-029: corpo ativo como tecnologia própria, com nome Tônus.
 - **0.5** — registra a D-028: projeto como descritor de conteúdo com raiz, cena inicial e assembly próprios.
