@@ -1,6 +1,6 @@
 # Caligo — Formatos
 
-Versão 0.2
+Versão 0.3
 
 ## 1. Princípio
 
@@ -27,12 +27,12 @@ O cook é incremental: GUID, hash da fonte e versão do cozinhador decidem se um
 
 ## 4. Cena de origem
 
-Extensão `.cscene`, UTF-8, JSON com esquema estável.
+Extensão `.cscene`, UTF-8, JSON com esquema estável. A versão atual é 2; a versão 1 continua sendo aceita na carga.
 
 ```json
 {
   "format": "caligo.scene",
-  "version": 1,
+  "version": 2,
   "guid": "8f14e45fceea167a5a36dedd4bea2543",
   "entities": [
     {
@@ -45,6 +45,10 @@ Extensão `.cscene`, UTF-8, JSON com esquema estável.
           "position": [0.0, 0.0, 0.0],
           "rotation": [0.0, 0.0, 0.0, 1.0],
           "scale": [1.0, 1.0, 1.0]
+        },
+        {
+          "type": "caligo.script",
+          "class": "Spinner"
         }
       ]
     }
@@ -57,6 +61,7 @@ Regras:
 - `guid` identifica a cena; `id` identifica a entidade dentro dela.
 - Todo componente tem `type` estável, nunca o nome de uma classe C++.
 - Transform é obrigatório em toda entidade; ausência é erro de cook.
+- `caligo.script` guarda o nome de um tipo registrado pelo módulo de jogo. Vários scripts por entidade são permitidos; o mesmo tipo repetido é erro de carga.
 - Componentes desconhecidos nunca são descartados em silêncio: a carga falha com diagnóstico e o cook preserva os dados para uma versão que os entenda.
 - A ordem das entidades não importa na origem; o cook ordena por `id`.
 - Prefab é uma cena com uma raiz marcada e é instanciado no cook, não no runtime.
@@ -117,8 +122,12 @@ O carregamento é direto: o bloco vira memória imutável e as consultas usam os
 - Tipo de entrada: `Caligo.Gameplay.GameModule`, que implementa `Caligo.Scripting.IGameModule`.
 - O assembly referencia apenas `Caligo.Scripting.dll`; não referencia render, física ou memória.
 - A superfície nativa é uma ABI C versionada, gerada a partir de um esquema. O lado C# usa wrappers tipados; o lado C++ nunca expõe STL, exceção ou ponteiro opaco sem contrato.
-- Hot reload usa `AssemblyLoadContext` coletável. Estado estático é proibido no assembly de gameplay. O contexto anterior é descarregado após dois frames sem referência.
+- Hospedagem framework-dependent com runtime .NET privado em `<exe>/runtime/dotnet`, bootstrap não coletável em `<exe>/runtime/host` e assemblies do jogo em `<exe>/runtime/gameplay`.
+- `hostfxr` carrega o bootstrap; o bootstrap cria um `AssemblyLoadContext` coletável e faz shadow copy da pasta gerenciada antes de carregar `Caligo.Scripting.dll` e `Caligo.Gameplay.dll`.
+- Hot reload usa o `AssemblyLoadContext` coletável. Estado estático é proibido no assembly de gameplay. O contexto anterior é descarregado ao parar ou recarregar a execução.
 - Sem script, a engine inicia e roda a cena. Script é uma camada, não um requisito de boot.
+
+Detalhes em `docs/sistemas/SCRIPTING.md`.
 
 ## 10. Versionamento
 
@@ -137,5 +146,6 @@ O carregamento é direto: o bloco vira memória imutável e as consultas usam os
 
 ## 12. Histórico
 
+- **0.3** — cena na versão 2 com `caligo.script`; a carga aceita a versão 1. Hospedagem de script com runtime privado, shadow copy e contexto coletável.
 - **0.2** — a carga da cena rejeita componentes desconhecidos com diagnóstico; a preservação fica no cook.
 - **0.1** — formatos de cena, contêiner, malha, textura, áudio, UI e script.

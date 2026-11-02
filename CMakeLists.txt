@@ -28,10 +28,12 @@ option(CALIGO_BUILD_TESTS "Build Caligo tests" ON)
 
 include(cmake/CompilerWarnings.cmake)
 include(cmake/ThirdParty.cmake)
+include(cmake/Scripts.cmake)
 
 add_subdirectory(engine/core)
 add_subdirectory(engine/platform)
 add_subdirectory(engine/scene)
+add_subdirectory(engine/script)
 add_subdirectory(engine/render)
 add_subdirectory(engine/editor)
 add_subdirectory(apps/caligo)

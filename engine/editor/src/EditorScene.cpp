@@ -72,6 +72,7 @@ void SelectEntity(EditorState& state, scene::EntityId id) {
 }
 
 void NewScene(EditorState& state) {
+  StopPlay(state);
   state.scene = scene::Scene{};
   state.selected = state.scene.CreateEntity("Mundo");
   state.scenePath.clear();
@@ -83,6 +84,7 @@ void NewScene(EditorState& state) {
 }
 
 bool LoadSceneFile(EditorState& state, const std::filesystem::path& path) {
+  StopPlay(state);
   Result<std::string> text = platform::ReadTextFile(path);
   if (!text) {
     ShowError(state, "Não foi possível abrir a cena", text.GetError().message);
@@ -158,6 +160,9 @@ void RequestAction(EditorState& state, PendingAction action) {
   if (action == PendingAction::None) {
     return;
   }
+  if (state.play.active) {
+    StopPlay(state);
+  }
   if (IsDirty(state)) {
     state.pendingAction = action;
     state.discardPopupRequested = true;
@@ -186,6 +191,9 @@ void ExecuteAction(EditorState& state, PendingAction action) {
 }
 
 void CreateEntity(EditorState& state) {
+  if (state.play.active) {
+    return;
+  }
   const scene::EntityId parent =
       state.scene.Find(state.selected) != nullptr ? state.selected : scene::kNoEntity;
   const scene::EntityId id = state.scene.CreateEntity("Entidade", parent);
@@ -199,6 +207,9 @@ void CreateEntity(EditorState& state) {
 }
 
 void DeleteSelectedEntity(EditorState& state) {
+  if (state.play.active) {
+    return;
+  }
   const scene::Entity* entity = state.scene.Find(state.selected);
   if (entity == nullptr) {
     state.selected = scene::kNoEntity;
@@ -221,7 +232,8 @@ void UpdateWindowTitle(EditorState& state) {
   }
   const std::string name =
       state.scenePath.empty() ? std::string("Sem título") : PathFileName(state.scenePath);
-  const std::string title = std::format("{} — Caligo Editor", IsDirty(state) ? name + " *" : name);
+  const std::string title = std::format("{} — Caligo Editor{}", IsDirty(state) ? name + " *" : name,
+                                        state.play.active ? " (executando)" : "");
   if (title != state.windowTitle) {
     state.windowTitle = title;
     state.window->SetTitle(state.windowTitle);

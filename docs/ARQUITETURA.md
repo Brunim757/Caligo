@@ -1,6 +1,6 @@
 # Caligo — Arquitetura
 
-Versão 0.1
+Versão 0.2
 
 ## 1. Princípio
 
@@ -22,7 +22,7 @@ A arquitetura existe para que o código continue pequeno, previsível e substitu
 | `physics` | Jolt, queries, character, veículos | core, scene |
 | `audio` | mixer, 3D, zonas, streaming | core, assets |
 | `animation` | clips, blend, IK, retarget | core, scene |
-| `script` | host .NET, bindings, hot reload | core, scene, physics, audio |
+| `script` | host .NET via hostfxr, bindings, play e hot reload | core, scene, physics, audio |
 | `game` | mundo, streaming, trânsito, multidão, câmera, UI | todos acima |
 | `editor` | UI de ferramenta, viewport, painéis, profiler | todos acima |
 
@@ -32,6 +32,7 @@ Regras de fronteira:
 - Header inclui o mínimo; o resto é declaração antecipada.
 - Nenhum módulo importa o editor. O editor é folha.
 - O script nunca inclui header de render, física ou memória. Ele fala com uma ABI C curada.
+- O host nativo carrega `hostfxr` e um bootstrap não coletável; os assemblies de gameplay vivem em um `AssemblyLoadContext` coletável com shadow copy. Detalhes em `docs/sistemas/SCRIPTING.md`.
 
 ## 3. Threads
 
@@ -81,6 +82,7 @@ Regras:
 ## 7. Testes
 
 - doctest, um arquivo de teste por módulo.
+- Script: testes gerenciados em console, teste do host sem runtime e smoke de execução no `ctest`.
 - Unitário: matemática, containers, serialização, layout.
 - Integração: cena → física → snapshot de render.
 - Imagem dourada: WARP, determinística, 300 frames para sistemas temporais.

@@ -4,3 +4,5 @@ out/
 *.user
 logs/
 __pycache__/
+scripts/**/bin/
+scripts/**/obj/

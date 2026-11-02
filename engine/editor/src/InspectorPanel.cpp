@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <caligo/core/Log.h>
 #include <cmath>
+#include <format>
 #include <imgui.h>
 #include <string>
 
@@ -94,6 +95,72 @@ void DrawTransform(EditorState& state, const scene::Entity& entity) {
   }
 }
 
+bool HasScript(const scene::Entity& entity, const std::string& type) {
+  return std::any_of(entity.scripts.begin(), entity.scripts.end(),
+                     [&type](const scene::ScriptComponent& script) { return script.type == type; });
+}
+
+void DrawScripts(EditorState& state, const scene::Entity& entity) {
+  const std::string header = std::format("Scripts ({})", entity.scripts.size());
+  ImGui::SeparatorText(header.c_str());
+
+  std::string removed;
+  for (size_t index = 0; index < entity.scripts.size(); ++index) {
+    ImGui::PushID(static_cast<int>(index));
+    ImGui::BulletText("%s", entity.scripts[index].type.c_str());
+    ImGui::SameLine();
+    ImGui::BeginDisabled(state.play.active);
+    if (ImGui::SmallButton("Remover")) {
+      removed = entity.scripts[index].type;
+    }
+    ImGui::EndDisabled();
+    ImGui::PopID();
+  }
+  if (entity.scripts.empty()) {
+    ImGui::TextDisabled("Nenhum script anexado.");
+  }
+
+  if (!removed.empty()) {
+    if (!state.scene.RemoveScript(entity.id, removed)) {
+      CALIGO_LOG_WARN("não foi possível remover o script '{}' da entidade {}", removed, entity.id);
+    }
+    return;
+  }
+  if (state.play.active) {
+    return;
+  }
+  if (state.scriptTypes.empty()) {
+    ImGui::TextDisabled("Os scripts do jogo não estão disponíveis.");
+    return;
+  }
+
+  std::string added;
+  if (ImGui::BeginCombo("Adicionar script", "Escolher...")) {
+    bool anyAvailable = false;
+    for (const std::string& type : state.scriptTypes) {
+      if (HasScript(entity, type)) {
+        continue;
+      }
+      anyAvailable = true;
+      if (ImGui::Selectable(type.c_str())) {
+        added = type;
+      }
+    }
+    if (!anyAvailable) {
+      ImGui::TextDisabled("Todos os scripts já estão anexados.");
+    }
+    ImGui::EndCombo();
+  }
+
+  if (!added.empty()) {
+    if (!state.scene.AddScript(entity.id, added)) {
+      CALIGO_LOG_WARN("não foi possível anexar o script '{}' à entidade {}", added, entity.id);
+    } else {
+      CALIGO_LOG_INFO("script '{}' anexado à entidade {}", added, entity.id);
+    }
+  }
+}
+
 }
 
 void DrawInspector(EditorState& state) {
@@ -109,18 +176,29 @@ void DrawInspector(EditorState& state) {
     state.eulerOwner = scene::kNoEntity;
     ImGui::TextDisabled("Nenhuma entidade selecionada.");
     ImGui::Spacing();
+    ImGui::BeginDisabled(state.play.active);
     if (ImGui::Button("Criar entidade")) {
       CreateEntity(state);
     }
+    ImGui::EndDisabled();
     ImGui::End();
     return;
+  }
+
+  if (state.play.active) {
+    ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.36f, 1.0f),
+                       state.play.paused ? "Execução pausada" : "Execução em andamento");
+    ImGui::TextDisabled("Pare a execução para editar a cena.");
+    ImGui::Spacing();
   }
 
   EnsureInspectorCaches(state, *entity);
 
   ImGui::TextDisabled("ID %llu", static_cast<unsigned long long>(entity->id));
+  ImGui::BeginDisabled(state.play.active);
   ImGui::SetNextItemWidth(-1.0f);
   ImGui::InputText("##name", state.nameBuffer.data(), state.nameBuffer.size());
+  ImGui::EndDisabled();
   if (ImGui::IsItemDeactivatedAfterEdit()) {
     if (!state.scene.Rename(entity->id, state.nameBuffer.data())) {
       CALIGO_LOG_WARN("não foi possível renomear a entidade {}", entity->id);
@@ -133,20 +211,31 @@ void DrawInspector(EditorState& state) {
   }
 
   ImGui::Spacing();
+  ImGui::BeginDisabled(state.play.active);
   DrawParentCombo(state, *entity);
+  ImGui::EndDisabled();
 
   ImGui::SeparatorText("Componentes");
   if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
     entity = state.scene.Find(state.selected);
     if (entity != nullptr) {
+      ImGui::BeginDisabled(state.play.active);
       DrawTransform(state, *entity);
+      ImGui::EndDisabled();
     }
   }
 
+  entity = state.scene.Find(state.selected);
+  if (entity != nullptr) {
+    DrawScripts(state, *entity);
+  }
+
   ImGui::Separator();
+  ImGui::BeginDisabled(state.play.active);
   if (ImGui::Button("Excluir entidade")) {
     DeleteSelectedEntity(state);
   }
+  ImGui::EndDisabled();
 
   ImGui::End();
 }

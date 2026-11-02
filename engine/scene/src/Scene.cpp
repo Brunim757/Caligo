@@ -90,6 +90,34 @@ bool IsValidGuid(std::string_view guid) noexcept {
   return true;
 }
 
+bool IsValidScriptType(std::string_view type) noexcept {
+  if (type.empty() || type.size() > kMaxScriptTypeLength) {
+    return false;
+  }
+  const char first = type.front();
+  const bool firstLetter = (first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z');
+  if (!firstLetter) {
+    return false;
+  }
+  bool previousDot = false;
+  for (size_t index = 1; index < type.size(); ++index) {
+    const char character = type[index];
+    const bool letter =
+        (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z');
+    const bool digit = character >= '0' && character <= '9';
+    if (letter || digit || character == '_') {
+      previousDot = false;
+      continue;
+    }
+    if (character == '.' && !previousDot) {
+      previousDot = true;
+      continue;
+    }
+    return false;
+  }
+  return !previousDot;
+}
+
 bool IsFinite(const math::Vec3& value) noexcept {
   return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
@@ -235,6 +263,41 @@ bool Scene::SetTransform(EntityId id, const Transform& transform) {
   return true;
 }
 
+bool Scene::AddScript(EntityId id, std::string_view type) {
+  Entity* entity = Find(id);
+  if (entity == nullptr || !IsValidScriptType(type) ||
+      entity->scripts.size() >= kMaxScriptsPerEntity) {
+    return false;
+  }
+  const bool duplicate =
+      std::any_of(entity->scripts.begin(), entity->scripts.end(),
+                  [type](const ScriptComponent& script) { return script.type == type; });
+  if (duplicate) {
+    return false;
+  }
+  ScriptComponent script;
+  script.type.assign(type);
+  entity->scripts.push_back(std::move(script));
+  ++m_revision;
+  return true;
+}
+
+bool Scene::RemoveScript(EntityId id, std::string_view type) {
+  Entity* entity = Find(id);
+  if (entity == nullptr) {
+    return false;
+  }
+  const auto found =
+      std::find_if(entity->scripts.begin(), entity->scripts.end(),
+                   [type](const ScriptComponent& script) { return script.type == type; });
+  if (found == entity->scripts.end()) {
+    return false;
+  }
+  entity->scripts.erase(found);
+  ++m_revision;
+  return true;
+}
+
 Entity* Scene::Find(EntityId id) noexcept {
   for (Entity& entity : m_entities) {
     if (entity.id == id) {
@@ -308,6 +371,20 @@ Result<void> Scene::Validate() const {
     }
     if (!IsFinite(entity.transform)) {
       return Error{std::format("entity {} has a non-finite transform", entity.id), 4};
+    }
+    if (entity.scripts.size() > kMaxScriptsPerEntity) {
+      return Error{std::format("entity {} has too many script components", entity.id), 9};
+    }
+    for (size_t index = 0; index < entity.scripts.size(); ++index) {
+      const std::string& type = entity.scripts[index].type;
+      if (!IsValidScriptType(type)) {
+        return Error{std::format("entity {} has an invalid script type '{}'", entity.id, type), 10};
+      }
+      for (size_t other = 0; other < index; ++other) {
+        if (entity.scripts[other].type == type) {
+          return Error{std::format("entity {} repeats the script type '{}'", entity.id, type), 11};
+        }
+      }
     }
     largestId = std::max(largestId, entity.id);
   }

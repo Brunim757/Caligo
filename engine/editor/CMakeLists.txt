@@ -4,10 +4,12 @@ add_library(caligo_editor STATIC
   src/Editor.cpp
   src/EditorCamera.cpp
   src/EditorMenu.cpp
+  src/EditorPlay.cpp
   src/EditorScene.cpp
   src/EditorUi.cpp
   src/HierarchyPanel.cpp
   src/InspectorPanel.cpp
+  src/ViewportCanvas.cpp
   src/ViewportPanel.cpp
 )
 
@@ -17,8 +19,8 @@ target_include_directories(caligo_editor
 )
 
 target_link_libraries(caligo_editor
-  PUBLIC caligo_core
-  PRIVATE caligo_platform caligo_render caligo_scene imgui imguizmo d3d11 dxgi
+  PUBLIC caligo_core imgui
+  PRIVATE caligo_platform caligo_render caligo_scene caligo_script imguizmo d3d11 dxgi
 )
 
 target_compile_definitions(caligo_editor PRIVATE

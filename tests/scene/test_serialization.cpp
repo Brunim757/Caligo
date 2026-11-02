@@ -17,6 +17,8 @@ caligo::scene::Scene BuildScene() {
       caligo::math::RotationFromEulerDegrees(caligo::math::Vec3{0.0f, 45.0f, 0.0f});
   transform.scale = caligo::math::Vec3{2.0f, 0.5f, 3.0f};
   REQUIRE(scene.SetTransform(child, transform));
+  REQUIRE(scene.AddScript(child, "Spinner"));
+  REQUIRE(scene.AddScript(child, "PlayerMover"));
   return scene;
 }
 
@@ -27,7 +29,9 @@ TEST_CASE("scene serialization round trips") {
   const caligo::Result<std::string> saved = caligo::scene::SaveSceneToString(original);
   REQUIRE(saved);
   CHECK(saved.Value().find("\"format\": \"caligo.scene\"") != std::string::npos);
+  CHECK(saved.Value().find("\"version\": 2") != std::string::npos);
   CHECK(saved.Value().find("Café") != std::string::npos);
+  CHECK(saved.Value().find("caligo.script") != std::string::npos);
 
   const caligo::Result<caligo::scene::Scene> loaded =
       caligo::scene::LoadSceneFromString(saved.Value());
@@ -51,6 +55,19 @@ TEST_CASE("scene serialization round trips") {
   CHECK(child->transform.scale.x == doctest::Approx(2.0f));
   CHECK(child->transform.scale.y == doctest::Approx(0.5f));
   CHECK(child->transform.scale.z == doctest::Approx(3.0f));
+  REQUIRE(child->scripts.size() == 2);
+  CHECK(child->scripts[0].type == "Spinner");
+  CHECK(child->scripts[1].type == "PlayerMover");
+}
+
+TEST_CASE("scene serialization accepts version one scenes") {
+  const std::string text =
+      R"({"format":"caligo.scene","version":1,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[{"id":1,"name":"Mundo","parent":0,"components":[{"type":"caligo.transform","position":[0.0,0.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0]}]}]})";
+  const caligo::Result<caligo::scene::Scene> loaded = caligo::scene::LoadSceneFromString(text);
+  REQUIRE(loaded);
+  REQUIRE(loaded.Value().Entities().size() == 1);
+  CHECK(loaded.Value().Entities().front().scripts.empty());
+  CHECK(loaded.Value().Validate());
 }
 
 TEST_CASE("scene serialization rejects malformed input") {
@@ -58,9 +75,17 @@ TEST_CASE("scene serialization rejects malformed input") {
   CHECK_FALSE(caligo::scene::LoadSceneFromString("[]"));
   CHECK_FALSE(caligo::scene::LoadSceneFromString(R"({"format":"other","version":1})"));
   CHECK_FALSE(caligo::scene::LoadSceneFromString(
-      R"({"format":"caligo.scene","version":2,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[]})"));
+      R"({"format":"caligo.scene","version":3,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[]})"));
   CHECK_FALSE(caligo::scene::LoadSceneFromString(
       R"({"format":"caligo.scene","version":1,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[{"id":1,"name":"Sem transform","parent":0,"components":[]}]})"));
+  CHECK_FALSE(caligo::scene::LoadSceneFromString(
+      R"({"format":"caligo.scene","version":2,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[{"id":1,"name":"Script sem classe","parent":0,"components":[{"type":"caligo.transform","position":[0.0,0.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0]},{"type":"caligo.script"}]}]})"));
+  CHECK_FALSE(caligo::scene::LoadSceneFromString(
+      R"({"format":"caligo.scene","version":2,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[{"id":1,"name":"Script inválido","parent":0,"components":[{"type":"caligo.transform","position":[0.0,0.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0]},{"type":"caligo.script","class":"Spinner!"}]}]})"));
+  CHECK_FALSE(caligo::scene::LoadSceneFromString(
+      R"({"format":"caligo.scene","version":2,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[{"id":1,"name":"Script repetido","parent":0,"components":[{"type":"caligo.transform","position":[0.0,0.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0]},{"type":"caligo.script","class":"Spinner"},{"type":"caligo.script","class":"Spinner"}]}]})"));
+  CHECK_FALSE(caligo::scene::LoadSceneFromString(
+      R"({"format":"caligo.scene","version":2,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[{"id":1,"name":"Componente desconhecido","parent":0,"components":[{"type":"caligo.transform","position":[0.0,0.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0]},{"type":"caligo.light"}]}]})"));
 }
 
 TEST_CASE("example scene loads") {
@@ -72,5 +97,15 @@ TEST_CASE("example scene loads") {
       caligo::scene::LoadSceneFromString(text.Value());
   REQUIRE(scene);
   CHECK(scene.Value().Validate());
-  CHECK(scene.Value().Entities().size() == 8);
+  CHECK(scene.Value().Entities().size() == 9);
+  bool foundPlayer = false;
+  bool foundSpinner = false;
+  for (const caligo::scene::Entity& entity : scene.Value().Entities()) {
+    for (const caligo::scene::ScriptComponent& script : entity.scripts) {
+      foundPlayer = foundPlayer || script.type == "PlayerMover";
+      foundSpinner = foundSpinner || script.type == "Spinner";
+    }
+  }
+  CHECK(foundPlayer);
+  CHECK(foundSpinner);
 }

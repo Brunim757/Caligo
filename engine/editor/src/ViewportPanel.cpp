@@ -2,6 +2,7 @@
 #include <ImGuizmo.h>
 #include <algorithm>
 #include <array>
+#include <caligo/editor/ViewportCanvas.h>
 #include <cmath>
 #include <format>
 #include <imgui.h>
@@ -173,6 +174,12 @@ void HandleShortcuts(EditorState& state, bool hovered) {
   if (!hovered || ImGui::GetIO().WantTextInput) {
     return;
   }
+  if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+    FocusSelection(state);
+  }
+  if (state.play.active) {
+    return;
+  }
   if (ImGui::IsKeyPressed(ImGuiKey_W, false)) {
     state.operation = GizmoOperation::Translate;
   }
@@ -181,9 +188,6 @@ void HandleShortcuts(EditorState& state, bool hovered) {
   }
   if (ImGui::IsKeyPressed(ImGuiKey_R, false)) {
     state.operation = GizmoOperation::Scale;
-  }
-  if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
-    FocusSelection(state);
   }
 }
 
@@ -202,6 +206,7 @@ bool ToolButton(EditorState& state, const char* label, bool active) {
 }
 
 void DrawToolbar(EditorState& state) {
+  ImGui::BeginDisabled(state.play.active);
   if (ToolButton(state, "Mover (W)", state.operation == GizmoOperation::Translate)) {
     state.operation = GizmoOperation::Translate;
   }
@@ -219,6 +224,7 @@ void DrawToolbar(EditorState& state) {
     state.space = state.space == GizmoSpace::Local ? GizmoSpace::World : GizmoSpace::Local;
   }
   ImGui::SetItemTooltip("Alterna entre eixos locais e globais.");
+  ImGui::EndDisabled();
   ImGui::SameLine();
   ImGui::BeginDisabled(state.selected == scene::kNoEntity);
   if (ToolButton(state, "Focar (F)", false)) {
@@ -226,7 +232,12 @@ void DrawToolbar(EditorState& state) {
   }
   ImGui::EndDisabled();
   ImGui::SameLine();
-  ImGui::TextDisabled("Ctrl: encaixe");
+  if (state.play.active) {
+    ImGui::TextColored(ImVec4(0.95f, 0.72f, 0.36f, 1.0f),
+                       state.play.paused ? "Pausado" : "Em execução");
+  } else {
+    ImGui::TextDisabled("Ctrl: encaixe");
+  }
 }
 
 void ManipulateSelection(EditorState& state, const math::Mat4& view, const math::Mat4& projection) {
@@ -236,7 +247,7 @@ void ManipulateSelection(EditorState& state, const math::Mat4& view, const math:
   }
 
   const math::Mat4 world = state.scene.WorldMatrix(entity->id);
-  math::Mat4 manipulated = math::Transpose(world);
+  math::Mat4 manipulated = world;
   float snap[3]{0.0f, 0.0f, 0.0f};
   const float* snapPointer = nullptr;
   if (ImGui::GetIO().KeyCtrl) {
@@ -255,7 +266,7 @@ void ManipulateSelection(EditorState& state, const math::Mat4& view, const math:
     return;
   }
 
-  math::Mat4 local = math::Transpose(manipulated);
+  math::Mat4 local = manipulated;
   if (entity->parent != scene::kNoEntity) {
     const math::Mat4 parentInverse = math::Inverse(state.scene.WorldMatrix(entity->parent));
     local = math::Multiply(local, parentInverse);
@@ -359,11 +370,31 @@ void HandleSelection(EditorState& state, const std::vector<ScreenMarker>& marker
 }
 
 void DrawOverlay(EditorState& state, const ImVec2& origin, const ImVec2& size) {
+  ImDrawList* drawList = ImGui::GetWindowDrawList();
+  const ImVec2 canvasMax{origin.x + size.x, origin.y + size.y};
+
+  if (state.play.active) {
+    const ImU32 accent =
+        state.play.paused ? IM_COL32(255, 176, 64, 255) : IM_COL32(104, 201, 140, 255);
+    drawList->AddRect(origin, canvasMax, accent, 0.0f, 0, Pixels(state, 2.0f));
+
+    const std::string badge = std::format(
+        "{}  ·  {} quadros", state.play.paused ? "PAUSADO" : "EM EXECUÇÃO", state.play.ticks);
+    const ImVec2 badgeSize = ImGui::CalcTextSize(badge.c_str());
+    const ImVec2 badgeMin{origin.x + Pixels(state, 12.0f), origin.y + Pixels(state, 10.0f)};
+    const ImVec2 badgeMax{badgeMin.x + badgeSize.x + Pixels(state, 20.0f),
+                          badgeMin.y + badgeSize.y + Pixels(state, 10.0f)};
+    drawList->AddRectFilled(badgeMin, badgeMax, IM_COL32(13, 16, 20, 225), Pixels(state, 4.0f));
+    drawList->AddRectFilled(badgeMin, ImVec2(badgeMin.x + Pixels(state, 4.0f), badgeMax.y), accent,
+                            Pixels(state, 4.0f));
+    drawList->AddText(ImVec2(badgeMin.x + Pixels(state, 13.0f), badgeMin.y + Pixels(state, 5.0f)),
+                      accent, badge.c_str());
+  }
+
   const float overlayHeight = Pixels(state, kOverlayHeight);
   if (size.x < Pixels(state, 360.0f) || size.y < overlayHeight + Pixels(state, 20.0f)) {
     return;
   }
-  ImDrawList* drawList = ImGui::GetWindowDrawList();
   const scene::Entity* entity = state.scene.Find(state.selected);
   std::string label = "Nenhuma entidade selecionada";
   if (entity != nullptr) {
@@ -382,7 +413,9 @@ void DrawOverlay(EditorState& state, const ImVec2& origin, const ImVec2& size) {
       IM_COL32(13, 16, 20, 205), Pixels(state, 4.0f));
   drawList->AddText(labelMin, IM_COL32(218, 224, 233, 255), label.c_str());
 
-  const char* hint = "Botão direito: orbitar | Botão do meio: deslocar | Roda: zoom";
+  const char* hint = state.play.active
+                         ? "F5: parar | F6: pausar | F7: avançar | F8: recarregar scripts"
+                         : "Botão direito: orbitar | Botão do meio: deslocar | Roda: zoom";
   const ImVec2 hintSize = ImGui::CalcTextSize(hint);
   if (size.x > hintSize.x + labelSize.x + Pixels(state, 70.0f)) {
     const ImVec2 hintPosition{origin.x + size.x - hintSize.x - Pixels(state, 14.0f),
@@ -414,13 +447,11 @@ void DrawViewport(EditorState& state) {
   ImGui::EndChild();
   ImGui::PopStyleVar();
 
-  const ImVec2 canvasOrigin = ImGui::GetCursorScreenPos();
-  const ImVec2 canvasSize{std::max(ImGui::GetContentRegionAvail().x, 1.0f),
-                          std::max(ImGui::GetContentRegionAvail().y, 1.0f)};
-  ImGui::InvisibleButton("##viewport-canvas", canvasSize,
-                         ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
-                             ImGuiButtonFlags_MouseButtonMiddle);
-  const bool hovered = ImGui::IsItemHovered();
+  const ViewportCanvas canvas =
+      ResolveViewportCanvas(ImGui::GetCursorScreenPos(), ImGui::GetContentRegionAvail());
+  const ImVec2 canvasOrigin = canvas.origin;
+  const ImVec2 canvasSize = canvas.size;
+  const bool hovered = canvas.hovered;
 
   ImDrawList* drawList = ImGui::GetWindowDrawList();
   drawList->PushClipRect(
@@ -435,15 +466,13 @@ void DrawViewport(EditorState& state) {
   const float aspect = canvasSize.y > 0.0f ? canvasSize.x / canvasSize.y : 1.0f;
   const math::Mat4 view = state.camera.ViewMatrix();
   const math::Mat4 projection = state.camera.ProjectionMatrix(aspect);
-  const math::Mat4 viewTransposed = math::Transpose(view);
-  const math::Mat4 projectionTransposed = math::Transpose(projection);
 
   ImGuizmo::SetRect(canvasOrigin.x, canvasOrigin.y, canvasSize.x, canvasSize.y);
   ImGuizmo::SetOrthographic(false);
   ImGuizmo::SetDrawlist(drawList);
 
   const math::Mat4 identity = math::Identity();
-  ImGuizmo::DrawGrid(&viewTransposed._11, &projectionTransposed._11, &identity._11, kGridSize);
+  ImGuizmo::DrawGrid(&view._11, &projection._11, &identity._11, kGridSize);
 
   const std::vector<ScreenMarker> markers =
       BuildMarkers(state, view, projection, canvasOrigin, canvasSize);
@@ -461,10 +490,12 @@ void DrawViewport(EditorState& state) {
   }
   DrawMarkers(state, view, projection, markers, hoveredMarker, canvasOrigin, canvasSize);
 
-  ManipulateSelection(state, viewTransposed, projectionTransposed);
+  if (!state.play.active) {
+    ManipulateSelection(state, view, projection);
+  }
 
-  const bool gizmoBusy =
-      state.scene.Find(state.selected) != nullptr && (ImGuizmo::IsOver() || ImGuizmo::IsUsing());
+  const bool gizmoBusy = !state.play.active && state.scene.Find(state.selected) != nullptr &&
+                         (ImGuizmo::IsOver() || ImGuizmo::IsUsing());
   HandleSelection(state, markers, hovered, gizmoBusy, selectRadius);
   DrawOverlay(state, canvasOrigin, canvasSize);
 
