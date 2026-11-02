@@ -67,8 +67,6 @@ struct GBufferConstants {
 };
 
 Result<void> CreateResources(RhiDevice& device, GBufferPass::Impl& impl);
-Result<void> CreateTargets(RhiDevice& device, GBufferPass::Impl& impl, uint32_t width,
-                           uint32_t height);
 
 }
 
@@ -77,11 +75,6 @@ struct GBufferPass::Impl {
   std::unique_ptr<RhiInputLayout> layout;
   std::unique_ptr<RhiPipeline> pipeline;
   std::unique_ptr<RhiBuffer> constants;
-  std::unique_ptr<RhiTexture> albedo;
-  std::unique_ptr<RhiTexture> normal;
-  std::unique_ptr<RhiTexture> depth;
-  uint32_t width = 0;
-  uint32_t height = 0;
   bool initialized = false;
 };
 
@@ -117,40 +110,6 @@ Result<void> CreateResources(RhiDevice& device, GBufferPass::Impl& impl) {
   return {};
 }
 
-Result<void> CreateTargets(RhiDevice& device, GBufferPass::Impl& impl, uint32_t width,
-                           uint32_t height) {
-  RhiTextureDesc colorDescription;
-  colorDescription.width = width;
-  colorDescription.height = height;
-  colorDescription.format = RhiFormat::Rgba16Float;
-  colorDescription.renderTarget = true;
-  auto albedo = RhiTexture::Create(device, colorDescription);
-  if (!albedo) {
-    return albedo.GetError();
-  }
-  auto normal = RhiTexture::Create(device, colorDescription);
-  if (!normal) {
-    return normal.GetError();
-  }
-
-  RhiTextureDesc depthDescription;
-  depthDescription.width = width;
-  depthDescription.height = height;
-  depthDescription.format = RhiFormat::Depth32Float;
-  depthDescription.depthStencil = true;
-  auto depth = RhiTexture::Create(device, depthDescription);
-  if (!depth) {
-    return depth.GetError();
-  }
-
-  impl.albedo = std::move(albedo).Value();
-  impl.normal = std::move(normal).Value();
-  impl.depth = std::move(depth).Value();
-  impl.width = width;
-  impl.height = height;
-  return {};
-}
-
 }
 
 GBufferPass::GBufferPass() : m_impl(std::make_unique<Impl>()) {}
@@ -159,13 +118,10 @@ GBufferPass::~GBufferPass() = default;
 
 Result<void> GBufferPass::Render(RhiDevice& device, const MeshGeometry& mesh,
                                  std::span<const RenderItem> items,
-                                 const math::Mat4& viewProjection, uint32_t width,
-                                 uint32_t height) {
-  if (width == 0 || height == 0) {
-    return Error{"g-buffer needs a positive size", 1};
-  }
+                                 const math::Mat4& viewProjection, const RhiTexture& albedo,
+                                 const RhiTexture& normal, const RhiTexture& depth) {
   if (mesh.vertices == nullptr || mesh.indices == nullptr) {
-    return Error{"g-buffer needs a mesh", 2};
+    return Error{"g-buffer needs a mesh", 1};
   }
   if (!m_impl->initialized) {
     const Result<void> created = CreateResources(device, *m_impl);
@@ -173,20 +129,14 @@ Result<void> GBufferPass::Render(RhiDevice& device, const MeshGeometry& mesh,
       return created.GetError();
     }
   }
-  if (m_impl->albedo == nullptr || m_impl->width != width || m_impl->height != height) {
-    const Result<void> created = CreateTargets(device, *m_impl, width, height);
-    if (!created) {
-      return created.GetError();
-    }
-  }
 
   auto* context = static_cast<ID3D11DeviceContext*>(device.ContextHandle());
-  auto* albedoView = static_cast<ID3D11RenderTargetView*>(m_impl->albedo->RenderTargetView());
-  auto* normalView = static_cast<ID3D11RenderTargetView*>(m_impl->normal->RenderTargetView());
-  auto* depthView = static_cast<ID3D11DepthStencilView*>(m_impl->depth->DepthStencilView());
+  auto* albedoView = static_cast<ID3D11RenderTargetView*>(albedo.RenderTargetView());
+  auto* normalView = static_cast<ID3D11RenderTargetView*>(normal.RenderTargetView());
+  auto* depthView = static_cast<ID3D11DepthStencilView*>(depth.DepthStencilView());
   if (context == nullptr || albedoView == nullptr || normalView == nullptr ||
       depthView == nullptr) {
-    return Error{"g-buffer has no live targets", 3};
+    return Error{"g-buffer has no live targets", 2};
   }
 
   ID3D11ShaderResourceView* nullViews[3] = {nullptr, nullptr, nullptr};
@@ -195,8 +145,8 @@ Result<void> GBufferPass::Render(RhiDevice& device, const MeshGeometry& mesh,
   context->OMSetRenderTargets(2, targets, depthView);
 
   D3D11_VIEWPORT viewport{};
-  viewport.Width = static_cast<float>(width);
-  viewport.Height = static_cast<float>(height);
+  viewport.Width = static_cast<float>(albedo.Width());
+  viewport.Height = static_cast<float>(albedo.Height());
   viewport.MaxDepth = 1.0f;
   context->RSSetViewports(1, &viewport);
 
@@ -235,22 +185,6 @@ Result<void> GBufferPass::Render(RhiDevice& device, const MeshGeometry& mesh,
 
   context->OMSetRenderTargets(0, nullptr, nullptr);
   return {};
-}
-
-void* GBufferPass::AlbedoView() const noexcept {
-  return m_impl->albedo != nullptr ? m_impl->albedo->ShaderResourceView() : nullptr;
-}
-
-void* GBufferPass::NormalView() const noexcept {
-  return m_impl->normal != nullptr ? m_impl->normal->ShaderResourceView() : nullptr;
-}
-
-void* GBufferPass::DepthView() const noexcept {
-  return m_impl->depth != nullptr ? m_impl->depth->ShaderResourceView() : nullptr;
-}
-
-void* GBufferPass::DepthStencilView() const noexcept {
-  return m_impl->depth != nullptr ? m_impl->depth->DepthStencilView() : nullptr;
 }
 
 }

@@ -5,6 +5,7 @@
 #include <caligo/render/LightingPass.h>
 #include <caligo/render/MeshGeometry.h>
 #include <caligo/render/PostProcessor.h>
+#include <caligo/render/RenderGraph.h>
 #include <caligo/render/RhiBuffer.h>
 #include <caligo/render/RhiDevice.h>
 #include <caligo/render/RhiInputLayout.h>
@@ -127,6 +128,10 @@ float Halton(uint32_t index, uint32_t base) noexcept {
 Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
                            SceneRenderer::Impl& impl);
 
+Result<void> DrawGrid(RhiDevice& device, SceneRenderer::Impl& impl,
+                      const math::Mat4& viewProjection, const RhiTexture& target,
+                      const RhiTexture& depth);
+
 }
 
 struct SceneRenderer::Impl {
@@ -142,7 +147,7 @@ struct SceneRenderer::Impl {
   LightingPass lighting;
   PostProcessor post;
   TaaRenderer taa;
-  std::unique_ptr<RhiTexture> hdrColor;
+  RenderGraph graph;
   std::unique_ptr<RhiTexture> color;
   uint32_t gridVertexCount = 0;
   uint32_t frameIndex = 0;
@@ -155,16 +160,6 @@ namespace {
 
 Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
                            SceneRenderer::Impl& impl) {
-  RhiTextureDesc hdrDesc;
-  hdrDesc.width = width;
-  hdrDesc.height = height;
-  hdrDesc.format = RhiFormat::Rgba16Float;
-  hdrDesc.renderTarget = true;
-  auto hdrColor = RhiTexture::Create(device, hdrDesc);
-  if (!hdrColor) {
-    return hdrColor.GetError();
-  }
-
   RhiTextureDesc colorDesc;
   colorDesc.width = width;
   colorDesc.height = height;
@@ -174,8 +169,6 @@ Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
   if (!color) {
     return color.GetError();
   }
-
-  impl.hdrColor = std::move(hdrColor).Value();
   impl.color = std::move(color).Value();
   impl.width = width;
   impl.height = height;
@@ -235,18 +228,19 @@ Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
 }
 
 Result<void> DrawGrid(RhiDevice& device, SceneRenderer::Impl& impl,
-                      const math::Mat4& viewProjection, uint32_t width, uint32_t height) {
+                      const math::Mat4& viewProjection, const RhiTexture& target,
+                      const RhiTexture& depth) {
   auto* context = static_cast<ID3D11DeviceContext*>(device.ContextHandle());
-  auto* targetView = static_cast<ID3D11RenderTargetView*>(impl.hdrColor->RenderTargetView());
-  auto* depthView = static_cast<ID3D11DepthStencilView*>(impl.gbuffer.DepthStencilView());
+  auto* targetView = static_cast<ID3D11RenderTargetView*>(target.RenderTargetView());
+  auto* depthView = static_cast<ID3D11DepthStencilView*>(depth.DepthStencilView());
   if (context == nullptr || targetView == nullptr || depthView == nullptr) {
     return Error{"grid pass has no live targets", 1};
   }
 
   context->OMSetRenderTargets(1, &targetView, depthView);
   D3D11_VIEWPORT viewport{};
-  viewport.Width = static_cast<float>(width);
-  viewport.Height = static_cast<float>(height);
+  viewport.Width = static_cast<float>(target.Width());
+  viewport.Height = static_cast<float>(target.Height());
   viewport.MaxDepth = 1.0f;
   context->RSSetViewports(1, &viewport);
 
@@ -309,11 +303,6 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   mesh.indices = m_impl->boxIndices.get();
   mesh.indexCount = static_cast<uint32_t>(std::size(kCubeIndices));
 
-  const Result<void> shadows = m_impl->shadowMap.Render(device, mesh, items, light.direction);
-  if (!shadows) {
-    return shadows.GetError();
-  }
-
   ++m_impl->frameIndex;
   const float jitterX = (Halton(m_impl->frameIndex, 2) - 0.5f) * 2.0f / static_cast<float>(width);
   const float jitterY = (Halton(m_impl->frameIndex, 3) - 0.5f) * 2.0f / static_cast<float>(height);
@@ -323,50 +312,94 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   const math::Mat4 viewProjection = math::Multiply(camera.view, projection);
   const math::Mat4 inverseViewProjection = math::Inverse(viewProjection);
 
-  const Result<void> gbuffer =
-      m_impl->gbuffer.Render(device, mesh, items, viewProjection, width, height);
-  if (!gbuffer) {
-    return gbuffer.GetError();
-  }
+  RenderGraph& graph = m_impl->graph;
+  graph.Reset();
 
-  LightingInputs lightingInputs;
-  lightingInputs.albedo = m_impl->gbuffer.AlbedoView();
-  lightingInputs.normal = m_impl->gbuffer.NormalView();
-  lightingInputs.depth = m_impl->gbuffer.DepthView();
-  lightingInputs.shadowMap = m_impl->shadowMap.ResourceView();
-  lightingInputs.shadowSampler = m_impl->shadowMap.Sampler();
+  RenderGraphTextureDesc colorDescription;
+  colorDescription.width = width;
+  colorDescription.height = height;
+  colorDescription.format = RhiFormat::Rgba16Float;
+  const RenderGraph::ResourceId albedo = graph.CreateTexture(colorDescription);
+  const RenderGraph::ResourceId normal = graph.CreateTexture(colorDescription);
+  const RenderGraph::ResourceId hdr = graph.CreateTexture(colorDescription);
 
-  LightingSettings lightingSettings;
-  lightingSettings.inverseViewProjection = inverseViewProjection;
-  lightingSettings.lightViewProjection = m_impl->shadowMap.LightViewProjection();
-  lightingSettings.lightDirection = SafeLightDirection(light.direction);
-  lightingSettings.lightColor = light.color;
-  lightingSettings.background = kBackground;
-  lightingSettings.shadowTexel = m_impl->shadowMap.TexelSize();
-  lightingSettings.shadowBias = kShadowBias;
+  RenderGraphTextureDesc depthDescription;
+  depthDescription.width = width;
+  depthDescription.height = height;
+  depthDescription.format = RhiFormat::Depth32Float;
+  depthDescription.depthStencil = true;
+  const RenderGraph::ResourceId depth = graph.CreateTexture(depthDescription);
+  const RenderGraph::ResourceId finalColor = graph.ImportTexture(*m_impl->color);
 
-  const Result<void> lighting =
-      m_impl->lighting.Render(device, lightingInputs, lightingSettings,
-                              m_impl->hdrColor->RenderTargetView(), width, height);
-  if (!lighting) {
-    return lighting.GetError();
-  }
+  const RenderGraph::PassId shadowPass =
+      graph.AddPass([this, &device, mesh, items, light](RenderGraphContext&) {
+        return m_impl->shadowMap.Render(device, mesh, items, light.direction);
+      });
 
-  const Result<void> grid = DrawGrid(device, *m_impl, viewProjection, width, height);
-  if (!grid) {
-    return grid.GetError();
-  }
+  const RenderGraph::PassId gbufferPass =
+      graph.AddPass([this, &device, mesh, items, viewProjection, albedo, normal,
+                     depth](RenderGraphContext& context) {
+        return m_impl->gbuffer.Render(device, mesh, items, viewProjection, context.Texture(albedo),
+                                      context.Texture(normal), context.Texture(depth));
+      });
+  graph.Write(gbufferPass, albedo);
+  graph.Write(gbufferPass, normal);
+  graph.Write(gbufferPass, depth);
 
-  const Result<void> resolved =
-      m_impl->taa.Apply(device, m_impl->hdrColor->ShaderResourceView(), m_impl->gbuffer.DepthView(),
-                        inverseViewProjection, viewProjection, width, height);
-  if (!resolved) {
-    return resolved.GetError();
-  }
-  const Result<void> post = m_impl->post.Apply(device, m_impl->taa.ResultView(),
-                                               m_impl->color->RenderTargetView(), width, height);
-  if (!post) {
-    return post.GetError();
+  const RenderGraph::PassId lightingPass =
+      graph.AddPass([this, &device, light, albedo, normal, depth, hdr, inverseViewProjection, width,
+                     height](RenderGraphContext& context) {
+        LightingInputs inputs;
+        inputs.albedo = context.Texture(albedo).ShaderResourceView();
+        inputs.normal = context.Texture(normal).ShaderResourceView();
+        inputs.depth = context.Texture(depth).ShaderResourceView();
+        inputs.shadowMap = m_impl->shadowMap.ResourceView();
+        inputs.shadowSampler = m_impl->shadowMap.Sampler();
+
+        LightingSettings settings;
+        settings.inverseViewProjection = inverseViewProjection;
+        settings.lightViewProjection = m_impl->shadowMap.LightViewProjection();
+        settings.lightDirection = SafeLightDirection(light.direction);
+        settings.lightColor = light.color;
+        settings.background = kBackground;
+        settings.shadowTexel = m_impl->shadowMap.TexelSize();
+        settings.shadowBias = kShadowBias;
+
+        return m_impl->lighting.Render(device, inputs, settings,
+                                       context.Texture(hdr).RenderTargetView(), width, height);
+      });
+  graph.Read(lightingPass, albedo);
+  graph.Read(lightingPass, normal);
+  graph.Read(lightingPass, depth);
+  graph.Write(lightingPass, hdr);
+
+  const RenderGraph::PassId gridPass = graph.AddPass([this, &device, viewProjection, hdr,
+                                                      depth](RenderGraphContext& context) {
+    return DrawGrid(device, *m_impl, viewProjection, context.Texture(hdr), context.Texture(depth));
+  });
+  graph.Read(gridPass, depth);
+  graph.Write(gridPass, hdr);
+
+  const RenderGraph::PassId taaPass =
+      graph.AddPass([this, &device, hdr, depth, inverseViewProjection, viewProjection, width,
+                     height](RenderGraphContext& context) {
+        return m_impl->taa.Apply(device, context.Texture(hdr).ShaderResourceView(),
+                                 context.Texture(depth).ShaderResourceView(), inverseViewProjection,
+                                 viewProjection, width, height);
+      });
+  graph.Read(taaPass, hdr);
+  graph.Read(taaPass, depth);
+
+  const RenderGraph::PassId postPass =
+      graph.AddPass([this, &device, finalColor, width, height](RenderGraphContext& context) {
+        return m_impl->post.Apply(device, m_impl->taa.ResultView(),
+                                  context.Texture(finalColor).RenderTargetView(), width, height);
+      });
+  graph.Write(postPass, finalColor);
+
+  const Result<void> executed = graph.Execute(device);
+  if (!executed) {
+    return executed.GetError();
   }
   return {};
 }

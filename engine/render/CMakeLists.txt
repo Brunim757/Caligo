@@ -11,6 +11,7 @@ add_library(caligo_render STATIC
   src/RhiSampler.cpp
   src/RhiShader.cpp
   src/RhiTexture.cpp
+  src/RenderGraph.cpp
   src/SceneRenderer.cpp
   src/ShadowMap.cpp
   src/TaaRenderer.cpp

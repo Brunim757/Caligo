@@ -10,6 +10,7 @@
 namespace caligo::render {
 
 class RhiDevice;
+class RhiTexture;
 struct RenderItem;
 
 class GBufferPass final {
@@ -26,12 +27,8 @@ public:
 
   [[nodiscard]] Result<void> Render(RhiDevice& device, const MeshGeometry& mesh,
                                     std::span<const RenderItem> items,
-                                    const math::Mat4& viewProjection, uint32_t width,
-                                    uint32_t height);
-  [[nodiscard]] void* AlbedoView() const noexcept;
-  [[nodiscard]] void* NormalView() const noexcept;
-  [[nodiscard]] void* DepthView() const noexcept;
-  [[nodiscard]] void* DepthStencilView() const noexcept;
+                                    const math::Mat4& viewProjection, const RhiTexture& albedo,
+                                    const RhiTexture& normal, const RhiTexture& depth);
 
 private:
   std::unique_ptr<Impl> m_impl;
