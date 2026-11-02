@@ -99,7 +99,7 @@ Result<std::unique_ptr<RhiTexture>> RhiTexture::Create(RhiDevice& device,
                               : (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
   const HRESULT result =
-      nativeDevice->CreateTexture2D(description, nullptr, texture->m_impl->texture.GetAddressOf());
+      nativeDevice->CreateTexture2D(&description, nullptr, texture->m_impl->texture.GetAddressOf());
   if (FAILED(result)) {
     return Error{Failure("ID3D11Device::CreateTexture2D", result), 4};
   }
@@ -152,7 +152,7 @@ Result<std::vector<uint8_t>> RhiTexture::ReadPixels() const {
   staging.MiscFlags = 0;
 
   ComPtr<ID3D11Texture2D> copy;
-  HRESULT result = m_impl->device->CreateTexture2D(staging, nullptr, copy.GetAddressOf());
+  HRESULT result = m_impl->device->CreateTexture2D(&staging, nullptr, copy.GetAddressOf());
   if (FAILED(result)) {
     return Error{Failure("ID3D11Device::CreateTexture2D", result), 2};
   }
