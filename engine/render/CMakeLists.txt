@@ -1,6 +1,7 @@
 add_library(caligo_render STATIC
   src/GraphicsDevice.cpp
   src/ImageDiff.cpp
+  src/PostProcessor.cpp
   src/RhiBuffer.cpp
   src/RhiDevice.cpp
   src/RhiInputLayout.cpp

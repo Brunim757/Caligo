@@ -1,6 +1,7 @@
 #include <windows.h>
 
-#include <algorithm>
+#include "RenderPassUtil.h"
+#include <caligo/render/PostProcessor.h>
 #include <caligo/render/RhiBuffer.h>
 #include <caligo/render/RhiDevice.h>
 #include <caligo/render/RhiInputLayout.h>
@@ -203,6 +204,8 @@ struct SceneRenderer::Impl {
   std::unique_ptr<RhiBuffer> boxConstants;
   std::unique_ptr<RhiBuffer> gridConstants;
   ShadowMap shadowMap;
+  PostProcessor post;
+  std::unique_ptr<RhiTexture> hdrColor;
   std::unique_ptr<RhiTexture> color;
   std::unique_ptr<RhiTexture> depth;
   uint32_t gridVertexCount = 0;
@@ -215,6 +218,16 @@ namespace {
 
 Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
                            SceneRenderer::Impl& impl) {
+  RhiTextureDesc hdrDesc;
+  hdrDesc.width = width;
+  hdrDesc.height = height;
+  hdrDesc.format = RhiFormat::Rgba16Float;
+  hdrDesc.renderTarget = true;
+  auto hdrColor = RhiTexture::Create(device, hdrDesc);
+  if (!hdrColor) {
+    return hdrColor.GetError();
+  }
+
   RhiTextureDesc colorDesc;
   colorDesc.width = width;
   colorDesc.height = height;
@@ -235,6 +248,7 @@ Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
     return depth.GetError();
   }
 
+  impl.hdrColor = std::move(hdrColor).Value();
   impl.color = std::move(color).Value();
   impl.depth = std::move(depth).Value();
   impl.width = width;
@@ -242,34 +256,12 @@ Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
   return {};
 }
 
-template <typename T>
-Result<void> CreateShader(RhiDevice& device, const char* source, std::unique_ptr<T>& target) {
-  const RhiShaderDesc description{source};
-  auto shader = RhiShader::Create(device, description);
-  if (!shader) {
-    return shader.GetError();
-  }
-  target = std::move(shader).Value();
-  return {};
-}
-
-template <typename T>
-Result<void> CreatePipeline(RhiDevice& device, const RhiPipelineDesc& description,
-                            std::unique_ptr<T>& target) {
-  auto pipeline = RhiPipeline::Create(device, description);
-  if (!pipeline) {
-    return pipeline.GetError();
-  }
-  target = std::move(pipeline).Value();
-  return {};
-}
-
 Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
-  Result<void> shaders = CreateShader(device, kBoxShader, impl.boxShader);
+  Result<void> shaders = detail::CreateShader(device, kBoxShader, impl.boxShader);
   if (!shaders) {
     return shaders.GetError();
   }
-  shaders = CreateShader(device, kGridShader, impl.gridShader);
+  shaders = detail::CreateShader(device, kGridShader, impl.gridShader);
   if (!shaders) {
     return shaders.GetError();
   }
@@ -287,14 +279,14 @@ Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
 
   RhiPipelineDesc boxDescription;
   boxDescription.cullBack = false;
-  Result<void> pipelines = CreatePipeline(device, boxDescription, impl.boxPipeline);
+  Result<void> pipelines = detail::CreatePipeline(device, boxDescription, impl.boxPipeline);
   if (!pipelines) {
     return pipelines.GetError();
   }
   RhiPipelineDesc gridDescription;
   gridDescription.cullBack = false;
   gridDescription.depthWrite = false;
-  pipelines = CreatePipeline(device, gridDescription, impl.gridPipeline);
+  pipelines = detail::CreatePipeline(device, gridDescription, impl.gridPipeline);
   if (!pipelines) {
     return pipelines.GetError();
   }
@@ -335,16 +327,6 @@ Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
 
   impl.initialized = true;
   return {};
-}
-
-void BindPipeline(ID3D11DeviceContext* context, const RhiShader& shader,
-                  const RhiInputLayout& layout, const RhiPipeline& pipeline) {
-  context->IASetInputLayout(static_cast<ID3D11InputLayout*>(layout.Handle()));
-  context->VSSetShader(static_cast<ID3D11VertexShader*>(shader.VertexShaderHandle()), nullptr, 0);
-  context->PSSetShader(static_cast<ID3D11PixelShader*>(shader.PixelShaderHandle()), nullptr, 0);
-  context->RSSetState(static_cast<ID3D11RasterizerState*>(pipeline.RasterizerState()));
-  context->OMSetDepthStencilState(
-      static_cast<ID3D11DepthStencilState*>(pipeline.DepthStencilState()), 0);
 }
 
 template <typename T>
@@ -395,7 +377,7 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   const math::Mat4 lightViewProjection = m_impl->shadowMap.LightViewProjection();
 
   auto* context = static_cast<ID3D11DeviceContext*>(device.ContextHandle());
-  auto* targetView = static_cast<ID3D11RenderTargetView*>(m_impl->color->RenderTargetView());
+  auto* targetView = static_cast<ID3D11RenderTargetView*>(m_impl->hdrColor->RenderTargetView());
   auto* depthView = static_cast<ID3D11DepthStencilView*>(m_impl->depth->DepthStencilView());
   if (context == nullptr || targetView == nullptr || depthView == nullptr) {
     return Error{"scene renderer has no live targets", 2};
@@ -408,11 +390,13 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   viewport.MaxDepth = 1.0f;
   context->RSSetViewports(1, &viewport);
 
-  const float clear[4] = {0.086f, 0.098f, 0.118f, 1.0f};
+  const float clear[4] = {0.020f, 0.025f, 0.035f, 1.0f};
   context->ClearRenderTargetView(targetView, clear);
   context->ClearDepthStencilView(depthView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-  BindPipeline(context, *m_impl->boxShader, *m_impl->boxLayout, *m_impl->boxPipeline);
+  const math::Mat4 viewProjection = math::Multiply(camera.view, camera.projection);
+
+  detail::BindPipeline(context, *m_impl->boxShader, *m_impl->boxLayout, *m_impl->boxPipeline);
   context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   BindVertexBuffer(context, m_impl->boxVertices, static_cast<uint32_t>(sizeof(MeshVertex)));
   context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(m_impl->boxIndices->Handle()),
@@ -430,7 +414,7 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   for (const RenderItem& item : items) {
     BoxConstants constants;
     constants.world = item.world;
-    constants.viewProjection = math::Multiply(camera.view, camera.projection);
+    constants.viewProjection = viewProjection;
     constants.lightViewProjection = lightViewProjection;
     constants.baseColor[0] = item.color.x;
     constants.baseColor[1] = item.color.y;
@@ -452,7 +436,7 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
     context->DrawIndexed(static_cast<UINT>(std::size(kCubeIndices)), 0, 0);
   }
 
-  BindPipeline(context, *m_impl->gridShader, *m_impl->gridLayout, *m_impl->gridPipeline);
+  detail::BindPipeline(context, *m_impl->gridShader, *m_impl->gridLayout, *m_impl->gridPipeline);
   context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
   BindVertexBuffer(context, m_impl->gridVertices, static_cast<uint32_t>(sizeof(float) * 3));
   context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
@@ -461,7 +445,7 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   context->PSSetConstantBuffers(0, 1, &gridConstantBuffer);
 
   GridConstants gridConstants;
-  gridConstants.viewProjection = math::Multiply(camera.view, camera.projection);
+  gridConstants.viewProjection = viewProjection;
   gridConstants.gridColor[0] = 0.20f;
   gridConstants.gridColor[1] = 0.24f;
   gridConstants.gridColor[2] = 0.30f;
@@ -473,7 +457,12 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   }
   context->Draw(m_impl->gridVertexCount, 0);
 
-  context->OMSetRenderTargets(0, nullptr, nullptr);
+  void* sourceView = m_impl->hdrColor->ShaderResourceView();
+  void* outputView = m_impl->color->RenderTargetView();
+  const Result<void> post = m_impl->post.Apply(device, sourceView, outputView, width, height);
+  if (!post) {
+    return post.GetError();
+  }
   return {};
 }
 

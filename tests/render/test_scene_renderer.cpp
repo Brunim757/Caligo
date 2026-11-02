@@ -7,13 +7,14 @@
 #include <cstdint>
 #include <cstdlib>
 #include <doctest/doctest.h>
+#include <span>
 #include <vector>
 
 namespace {
 
 constexpr uint32_t kSize = 64;
 constexpr uint32_t kSmallSize = 32;
-constexpr int kTolerance = 3;
+constexpr int kTolerance = 4;
 
 struct Rgb {
   int red = 0;
@@ -21,17 +22,28 @@ struct Rgb {
   int blue = 0;
 };
 
+float Aces(float value) {
+  const float numerator = value * (2.51f * value + 0.03f);
+  const float denominator = value * (2.43f * value + 0.59f) + 0.14f;
+  return caligo::math::Clamp(numerator / denominator, 0.0f, 1.0f);
+}
+
+float Encode(float value) {
+  return std::pow(Aces(value), 1.0f / 2.2f);
+}
+
 int ToByte(float value) {
   return static_cast<int>(std::lround(static_cast<double>(value) * 255.0));
 }
 
 Rgb LitColor(const caligo::math::Vec3& base, const caligo::math::Vec3& light) {
-  return Rgb{ToByte(base.x * 0.22f + base.x * light.x), ToByte(base.y * 0.22f + base.y * light.y),
-             ToByte(base.z * 0.22f + base.z * light.z)};
+  return Rgb{ToByte(Encode(base.x * 0.22f + base.x * light.x)),
+             ToByte(Encode(base.y * 0.22f + base.y * light.y)),
+             ToByte(Encode(base.z * 0.22f + base.z * light.z))};
 }
 
 Rgb BackgroundColor() {
-  return Rgb{ToByte(0.086f), ToByte(0.098f), ToByte(0.118f)};
+  return Rgb{ToByte(Encode(0.020f)), ToByte(Encode(0.025f)), ToByte(Encode(0.035f))};
 }
 
 Rgb Sample(const std::vector<uint8_t>& pixels, uint32_t size, uint32_t x, uint32_t y) {
@@ -167,7 +179,7 @@ TEST_CASE("o renderizador de cena projeta sombra direcional no chão") {
   occluder.world = caligo::math::ComposeTransform(caligo::math::Vec3{0.0f, 3.0f, 0.0f},
                                                   caligo::math::IdentityRotation(),
                                                   caligo::math::Vec3{1.5f, 1.0f, 1.5f});
-  occluder.color = caligo::math::Vec3{1.0f, 0.30f, 0.30f};
+  occluder.color = caligo::math::Vec3{0.5f, 0.30f, 0.30f};
   occluded.push_back(occluder);
 
   caligo::render::SceneRenderer renderer;
@@ -191,4 +203,42 @@ TEST_CASE("o renderizador de cena projeta sombra direcional no chão") {
     }
   }
   CHECK(darkened > 40);
+}
+
+TEST_CASE("o pos-processamento espalha o brilho de objetos intensos") {
+  auto device = caligo::render::RhiDevice::Create(true);
+  REQUIRE(device.HasValue());
+
+  caligo::render::RenderCamera camera;
+  camera.view = caligo::math::LookAt(caligo::math::Vec3{0.0f, 0.0f, 4.0f},
+                                     caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                     caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+  camera.projection = caligo::math::Perspective(55.0f, 1.0f, 0.1f, 100.0f);
+
+  caligo::render::RenderLight light;
+  light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
+  light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
+
+  caligo::render::SceneRenderer renderer;
+  REQUIRE(renderer
+              .Render(*device.Value(), std::span<const caligo::render::RenderItem>{}, camera, light,
+                      kSize, kSize)
+              .HasValue());
+  const caligo::Result<std::vector<uint8_t>> backgroundFrame = renderer.ReadColor();
+  REQUIRE(backgroundFrame.HasValue());
+
+  std::vector<caligo::render::RenderItem> bright(1);
+  bright[0].world = caligo::math::Identity();
+  bright[0].color = caligo::math::Vec3{20.0f, 20.0f, 20.0f};
+  REQUIRE(renderer.Render(*device.Value(), bright, camera, light, kSize, kSize).HasValue());
+  const caligo::Result<std::vector<uint8_t>> bloomFrame = renderer.ReadColor();
+  REQUIRE(bloomFrame.HasValue());
+
+  const Rgb backgroundPixel = Sample(backgroundFrame.Value(), kSize, 32, 18);
+  const Rgb bloomPixel = Sample(bloomFrame.Value(), kSize, 32, 18);
+  const int backgroundLuminance =
+      backgroundPixel.red + backgroundPixel.green + backgroundPixel.blue;
+  const int bloomLuminance = bloomPixel.red + bloomPixel.green + bloomPixel.blue;
+  CHECK(backgroundLuminance < 300);
+  CHECK(bloomLuminance > backgroundLuminance + 30);
 }

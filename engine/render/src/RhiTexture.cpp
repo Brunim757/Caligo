@@ -29,6 +29,8 @@ DXGI_FORMAT ToDxgi(RhiFormat format) {
   switch (format) {
   case RhiFormat::Rgba8Unorm:
     return DXGI_FORMAT_R8G8B8A8_UNORM;
+  case RhiFormat::Rgba16Float:
+    return DXGI_FORMAT_R16G16B16A16_FLOAT;
   case RhiFormat::Depth32Float:
     return DXGI_FORMAT_D32_FLOAT;
   }
@@ -39,6 +41,8 @@ DXGI_FORMAT ToResourceFormat(RhiFormat format) {
   switch (format) {
   case RhiFormat::Rgba8Unorm:
     return DXGI_FORMAT_R8G8B8A8_UNORM;
+  case RhiFormat::Rgba16Float:
+    return DXGI_FORMAT_R16G16B16A16_FLOAT;
   case RhiFormat::Depth32Float:
     return DXGI_FORMAT_R32_TYPELESS;
   }

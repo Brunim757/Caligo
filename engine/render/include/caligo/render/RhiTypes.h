@@ -4,7 +4,7 @@
 
 namespace caligo::render {
 
-enum class RhiFormat : uint8_t { Rgba8Unorm, Depth32Float };
+enum class RhiFormat : uint8_t { Rgba8Unorm, Rgba16Float, Depth32Float };
 
 enum class RhiVertexFormat : uint8_t { Float32x2, Float32x3, Float32x4 };
 
