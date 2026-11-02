@@ -58,13 +58,16 @@ Result<std::shared_ptr<AudioClip>> AudioClip::CreateFromFile(const std::string& 
   std::vector<float> samples;
   std::vector<float> buffer(static_cast<size_t>(kDecodeFrames) * channels);
   while (true) {
-    const ma_uint64 read =
-        ma_decoder_read_pcm_frames(&decoder, buffer.data(), kDecodeFrames, nullptr);
-    if (read == 0) {
+    ma_uint64 framesRead = 0;
+    const ma_result result =
+        ma_decoder_read_pcm_frames(&decoder, buffer.data(), kDecodeFrames, &framesRead);
+    if (framesRead > 0) {
+      samples.insert(samples.end(), buffer.begin(),
+                     buffer.begin() + static_cast<size_t>(framesRead) * channels);
+    }
+    if (result != MA_SUCCESS || framesRead == 0) {
       break;
     }
-    samples.insert(samples.end(), buffer.begin(),
-                   buffer.begin() + static_cast<size_t>(read) * channels);
   }
   ma_decoder_uninit(&decoder);
 
