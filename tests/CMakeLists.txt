@@ -10,6 +10,8 @@ add_executable(caligo_tests
   scene/test_scene.cpp
   scene/test_serialization.cpp
   script/test_script_host.cpp
+  render/test_image.cpp
+  render/test_offscreen.cpp
   editor/test_console.cpp
   editor/test_viewport.cpp
 )
@@ -19,13 +21,16 @@ target_link_libraries(caligo_tests PRIVATE
   caligo_platform
   caligo_scene
   caligo_script
+  caligo_render
   caligo_editor
   doctest::doctest
   imgui
+  d3d11
 )
 
 target_compile_definitions(caligo_tests PRIVATE
   CALIGO_CONTENT_DIR="${CMAKE_SOURCE_DIR}/content"
+  CALIGO_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/render/golden"
 )
 
 caligo_configure_target(caligo_tests)

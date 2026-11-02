@@ -6,6 +6,8 @@
 
 namespace caligo::render {
 
+class RhiDevice;
+
 class GraphicsDevice final {
 public:
   struct Impl;
@@ -25,6 +27,7 @@ public:
   [[nodiscard]] Result<void> EndFrame();
 
   [[nodiscard]] bool IsValid() const noexcept;
+  [[nodiscard]] RhiDevice* Rhi() const noexcept;
   [[nodiscard]] void* DeviceHandle() const noexcept;
   [[nodiscard]] void* ContextHandle() const noexcept;
   [[nodiscard]] uint32_t Width() const noexcept;
