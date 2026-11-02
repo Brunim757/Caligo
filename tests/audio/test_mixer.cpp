@@ -91,7 +91,7 @@ TEST_CASE("a distancia atenua o som e o silencia no limite") {
   mixer.Stop(middleVoice);
 
   voice.position = caligo::math::Vec3{0.0f, 0.0f, 200.0f};
-  mixer.Play(voice);
+  static_cast<void>(mixer.Play(voice));
   std::vector<float> farOutput(2, 0.0f);
   mixer.Mix(farOutput.data(), 1);
   const float farLevel = farOutput[0];
@@ -109,11 +109,11 @@ TEST_CASE("o som a direita pesa no canal direito") {
   voice.clip = MakeClip(std::vector<float>(480, 1.0f), 1, 48000);
   voice.position = caligo::math::Vec3{5.0f, 0.0f, 0.0f};
 
-  mixer.Play(voice);
+  static_cast<void>(mixer.Play(voice));
   std::vector<float> output(2, 0.0f);
   mixer.Mix(output.data(), 1);
   CHECK(output[1] > output[0]);
-  CHECK(output[0] == doctest::Approx(0.0f).margin(1.0e-3f));
+  CHECK(std::abs(output[0]) < 1.0e-3f);
   CHECK(output[1] == doctest::Approx(0.19191919f));
 }
 
@@ -123,7 +123,7 @@ TEST_CASE("um som estereo mantem os canais alinhados") {
   voice.clip = MakeClip(std::vector<float>{1.0f, 0.0f}, 2, 48000);
   voice.spatial = false;
 
-  mixer.Play(voice);
+  static_cast<void>(mixer.Play(voice));
   std::vector<float> output(2, 0.0f);
   mixer.Mix(output.data(), 1);
   CHECK(output[0] == doctest::Approx(1.0f));
@@ -136,7 +136,7 @@ TEST_CASE("um som estereo em um mixer mono e somado") {
   voice.clip = MakeClip(std::vector<float>{1.0f, 0.0f}, 2, 48000);
   voice.spatial = false;
 
-  mixer.Play(voice);
+  static_cast<void>(mixer.Play(voice));
   std::vector<float> output(1, 0.0f);
   mixer.Mix(output.data(), 1);
   CHECK(output[0] == doctest::Approx(0.5f));
@@ -145,16 +145,16 @@ TEST_CASE("um som estereo em um mixer mono e somado") {
 TEST_CASE("a taxa de amostragem do clipe controla a velocidade") {
   caligo::audio::Mixer mixer(48000, 2);
   caligo::audio::AudioVoiceDesc voice;
-  voice.clip = MakeClip(std::vector<float>{0.0f, 1.0f, 2.0f, 3.0f}, 1, 24000);
+  voice.clip = MakeClip(std::vector<float>{0.0f, 0.25f, 0.5f, 0.75f}, 1, 24000);
   voice.spatial = false;
 
-  mixer.Play(voice);
+  static_cast<void>(mixer.Play(voice));
   std::vector<float> output(4 * 2, 0.0f);
   mixer.Mix(output.data(), 4);
   CHECK(output[0] == doctest::Approx(0.0f));
-  CHECK(output[2] == doctest::Approx(0.5f));
-  CHECK(output[4] == doctest::Approx(1.0f));
-  CHECK(output[6] == doctest::Approx(1.5f));
+  CHECK(output[2] == doctest::Approx(0.125f));
+  CHECK(output[4] == doctest::Approx(0.25f));
+  CHECK(output[6] == doctest::Approx(0.375f));
 }
 
 TEST_CASE("a soma de varios sons fica limitada") {
@@ -163,8 +163,8 @@ TEST_CASE("a soma de varios sons fica limitada") {
   voice.clip = MakeClip(std::vector<float>(480, 1.0f), 1, 48000);
   voice.spatial = false;
 
-  mixer.Play(voice);
-  mixer.Play(voice);
+  static_cast<void>(mixer.Play(voice));
+  static_cast<void>(mixer.Play(voice));
   std::vector<float> output(2, 0.0f);
   mixer.Mix(output.data(), 1);
   CHECK(output[0] == doctest::Approx(1.0f));
@@ -183,8 +183,8 @@ TEST_CASE("parar todos os sons limpa o mixer") {
   caligo::audio::Mixer mixer(48000, 2);
   caligo::audio::AudioVoiceDesc voice;
   voice.clip = MakeClip(std::vector<float>(480, 1.0f), 1, 48000);
-  mixer.Play(voice);
-  mixer.Play(voice);
+  static_cast<void>(mixer.Play(voice));
+  static_cast<void>(mixer.Play(voice));
   CHECK(mixer.ActiveVoiceCount() == 2);
   mixer.StopAll();
   CHECK(mixer.ActiveVoiceCount() == 0);

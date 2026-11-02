@@ -42,7 +42,7 @@ public:
   void StopAll();
   [[nodiscard]] bool IsPlaying(VoiceId voice) const;
   void SetListener(const AudioListener& listener);
-  [[nodiscard]] const AudioListener& Listener() const noexcept;
+  [[nodiscard]] AudioListener Listener() const;
 
   void Mix(float* output, uint32_t frameCount);
 

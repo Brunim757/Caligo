@@ -164,7 +164,8 @@ void Mixer::SetListener(const AudioListener& listener) {
   m_impl->listener = listener;
 }
 
-const AudioListener& Mixer::Listener() const noexcept {
+AudioListener Mixer::Listener() const {
+  std::lock_guard<std::mutex> lock(m_impl->mutex);
   return m_impl->listener;
 }
 
