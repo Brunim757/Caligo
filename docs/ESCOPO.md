@@ -2,7 +2,7 @@
 
 > Engine de mundo aberto estilizado. Windows. Cidade densa e natureza estilizada. Nada além.
 
-Versão 0.9
+Versão 1.0
 
 ## 1. Identidade
 
@@ -54,7 +54,7 @@ Estas decisões não mudam sem RFC. A regra está na seção 11.
 | D-026 | Play-in-editor usa snapshot, tick fixo de 60 Hz, pausa e avanço de quadro | FIXO |
 | D-027 | Hospedagem de script framework-dependent com runtime .NET privado, contexto coletável e shadow copy | FIXO |
 | D-028 | Projeto como descritor de conteúdo, com raiz, cena inicial e assembly de gameplay próprios | FIXO |
-| D-029 | Corpo ativo como tecnologia própria, com nome Tônus, em camadas e afinado por dados | FIXO |
+| D-029 | Corpo ativo como tecnologia própria, com nome Tônus, em módulo próprio e afinado por dados | FIXO |
 
 ## 3. Não-objetivos
 
@@ -119,7 +119,8 @@ Módulos, com dependência apenas para baixo. O grafo completo, os contratos e a
 - **scene:** entidades, componentes, serialização, undo.
 - **physics:** Jolt, queries, character, veículos.
 - **audio:** mixer, 3D, zonas.
-- **animation:** clips, blend, IK, retarget, corpo ativo.
+- **animation:** clips, blend, IK, retarget.
+- **body:** Tônus, corpo ativo, comportamento e nível de simulação por distância.
 - **script:** host .NET, bindings, hot reload.
 - **game:** mundo, streaming, trânsito, multidão, câmera.
 - **editor:** UI, viewport, painéis, profiler.
@@ -256,6 +257,7 @@ O objetivo não é congelar a engine. É impedir que uma decisão fechada seja r
 - **0.4** — código proprietário; repositório público apenas para o CI gratuito.
 - **0.5** — nlohmann/json 3.12.0 como biblioteca JSON da cena e das ferramentas.
 - **0.6** — coordenadas canhotas com +X à direita, +Y para cima e +Z para frente.
+- **1.0** — Tônus em módulo próprio, acima de animação e física.
 - **0.9** — corpo ativo como tecnologia própria, com nome Tônus, em camadas e afinado por dados.
 - **0.8** — projeto como descritor de conteúdo, com raiz, cena inicial e assembly de gameplay próprios.
 - **0.7** — snapshot de play e hospedagem de script com runtime privado, contexto coletável e shadow copy.
