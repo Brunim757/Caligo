@@ -5,9 +5,11 @@ add_library(caligo_render STATIC
   src/RhiDevice.cpp
   src/RhiInputLayout.cpp
   src/RhiPipeline.cpp
+  src/RhiSampler.cpp
   src/RhiShader.cpp
   src/RhiTexture.cpp
   src/SceneRenderer.cpp
+  src/ShadowMap.cpp
 )
 
 target_include_directories(caligo_render PUBLIC include)

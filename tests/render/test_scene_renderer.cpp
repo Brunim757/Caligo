@@ -139,3 +139,56 @@ TEST_CASE("o renderizador de cena respeita a profundidade e é determinístico")
   REQUIRE(resized.Value().size() == static_cast<size_t>(kSmallSize) * kSmallSize * 4);
   CheckColor(Sample(resized.Value(), kSmallSize, 14, 14), LitColor(frontColor, light.color));
 }
+
+TEST_CASE("o renderizador de cena projeta sombra direcional no chão") {
+  auto device = caligo::render::RhiDevice::Create(true);
+  REQUIRE(device.HasValue());
+
+  caligo::render::RenderCamera camera;
+  camera.view = caligo::math::LookAt(caligo::math::Vec3{0.0f, 6.0f, 9.0f},
+                                     caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                     caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+  camera.projection = caligo::math::Perspective(55.0f, 1.0f, 0.1f, 100.0f);
+
+  caligo::render::RenderLight light;
+  light.direction = caligo::math::Normalize(caligo::math::Vec3{0.35f, 1.0f, 0.0f});
+  light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
+
+  const caligo::math::Mat4 floorWorld = caligo::math::ComposeTransform(
+      caligo::math::Vec3{0.0f, 0.0f, 0.0f}, caligo::math::IdentityRotation(),
+      caligo::math::Vec3{8.0f, 0.2f, 8.0f});
+
+  std::vector<caligo::render::RenderItem> lit(1);
+  lit[0].world = floorWorld;
+  lit[0].color = caligo::math::Vec3{0.6f, 0.6f, 0.6f};
+
+  std::vector<caligo::render::RenderItem> occluded = lit;
+  caligo::render::RenderItem occluder;
+  occluder.world = caligo::math::ComposeTransform(caligo::math::Vec3{0.0f, 3.0f, 0.0f},
+                                                  caligo::math::IdentityRotation(),
+                                                  caligo::math::Vec3{0.5f, 0.5f, 0.5f});
+  occluder.color = caligo::math::Vec3{1.0f, 0.30f, 0.30f};
+  occluded.push_back(occluder);
+
+  caligo::render::SceneRenderer renderer;
+  REQUIRE(renderer.Render(*device.Value(), lit, camera, light, kSize, kSize).HasValue());
+  const caligo::Result<std::vector<uint8_t>> litFrame = renderer.ReadColor();
+  REQUIRE(litFrame.HasValue());
+
+  REQUIRE(renderer.Render(*device.Value(), occluded, camera, light, kSize, kSize).HasValue());
+  const caligo::Result<std::vector<uint8_t>> shadowFrame = renderer.ReadColor();
+  REQUIRE(shadowFrame.HasValue());
+  REQUIRE(litFrame.Value().size() == shadowFrame.Value().size());
+
+  int darkened = 0;
+  for (size_t offset = 0; offset + 2 < litFrame.Value().size(); offset += 4) {
+    const int litLuminance =
+        litFrame.Value()[offset] + litFrame.Value()[offset + 1] + litFrame.Value()[offset + 2];
+    const int shadowLuminance = shadowFrame.Value()[offset] + shadowFrame.Value()[offset + 1] +
+                                shadowFrame.Value()[offset + 2];
+    if (litLuminance - shadowLuminance >= 60) {
+      ++darkened;
+    }
+  }
+  CHECK(darkened > 20);
+}

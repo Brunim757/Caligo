@@ -35,12 +35,36 @@ DXGI_FORMAT ToDxgi(RhiFormat format) {
   return DXGI_FORMAT_UNKNOWN;
 }
 
+DXGI_FORMAT ToResourceFormat(RhiFormat format) {
+  switch (format) {
+  case RhiFormat::Rgba8Unorm:
+    return DXGI_FORMAT_R8G8B8A8_UNORM;
+  case RhiFormat::Depth32Float:
+    return DXGI_FORMAT_R32_TYPELESS;
+  }
+  return DXGI_FORMAT_UNKNOWN;
+}
+
 Result<void> CreateViews(RhiTexture::Impl& impl) {
   if (impl.format == RhiFormat::Depth32Float) {
-    const HRESULT result = impl.device->CreateDepthStencilView(impl.texture.Get(), nullptr,
-                                                               impl.depthStencil.GetAddressOf());
+    D3D11_DEPTH_STENCIL_VIEW_DESC depthView{};
+    depthView.Format = DXGI_FORMAT_D32_FLOAT;
+    depthView.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+    depthView.Texture2D.MipSlice = 0;
+    HRESULT result = impl.device->CreateDepthStencilView(impl.texture.Get(), &depthView,
+                                                         impl.depthStencil.GetAddressOf());
     if (FAILED(result)) {
       return Error{Failure("ID3D11Device::CreateDepthStencilView", result), 3};
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC depthResource{};
+    depthResource.Format = DXGI_FORMAT_R32_FLOAT;
+    depthResource.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    depthResource.Texture2D.MipLevels = 1;
+    result = impl.device->CreateShaderResourceView(impl.texture.Get(), &depthResource,
+                                                   impl.shaderResource.GetAddressOf());
+    if (FAILED(result)) {
+      return Error{Failure("ID3D11Device::CreateShaderResourceView", result), 4};
     }
     return {};
   }
@@ -48,7 +72,7 @@ Result<void> CreateViews(RhiTexture::Impl& impl) {
   HRESULT result = impl.device->CreateRenderTargetView(impl.texture.Get(), nullptr,
                                                        impl.renderTarget.GetAddressOf());
   if (FAILED(result)) {
-    return Error{Failure("ID3D11Device::CreateRenderTargetView", result), 4};
+    return Error{Failure("ID3D11Device::CreateRenderTargetView", result), 5};
   }
 
   D3D11_SHADER_RESOURCE_VIEW_DESC view{};
@@ -58,7 +82,7 @@ Result<void> CreateViews(RhiTexture::Impl& impl) {
   result = impl.device->CreateShaderResourceView(impl.texture.Get(), &view,
                                                  impl.shaderResource.GetAddressOf());
   if (FAILED(result)) {
-    return Error{Failure("ID3D11Device::CreateShaderResourceView", result), 5};
+    return Error{Failure("ID3D11Device::CreateShaderResourceView", result), 6};
   }
   return {};
 }
@@ -91,11 +115,11 @@ Result<std::unique_ptr<RhiTexture>> RhiTexture::Create(RhiDevice& device,
   description.Height = desc.height;
   description.MipLevels = 1;
   description.ArraySize = 1;
-  description.Format = ToDxgi(desc.format);
+  description.Format = ToResourceFormat(desc.format);
   description.SampleDesc.Count = 1;
   description.Usage = D3D11_USAGE_DEFAULT;
   description.BindFlags = desc.depthStencil
-                              ? D3D11_BIND_DEPTH_STENCIL
+                              ? (D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE)
                               : (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
   const HRESULT result =

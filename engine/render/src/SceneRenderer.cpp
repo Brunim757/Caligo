@@ -1,5 +1,6 @@
 #include <windows.h>
 
+#include <algorithm>
 #include <caligo/render/RhiBuffer.h>
 #include <caligo/render/RhiDevice.h>
 #include <caligo/render/RhiInputLayout.h>
@@ -7,6 +8,8 @@
 #include <caligo/render/RhiShader.h>
 #include <caligo/render/RhiTexture.h>
 #include <caligo/render/SceneRenderer.h>
+#include <caligo/render/ShadowMap.h>
+#include <cmath>
 #include <d3d11.h>
 #include <iterator>
 #include <utility>
@@ -23,6 +26,7 @@ struct MeshVertex {
 
 constexpr float kHalf = 0.5f;
 constexpr int kGridHalfLines = 10;
+constexpr float kShadowBias = 0.0025f;
 
 constexpr MeshVertex kCubeVertices[] = {
     {{-kHalf, -kHalf, kHalf}, {0.0f, 0.0f, 1.0f}},
@@ -68,10 +72,15 @@ constexpr char kBoxShader[] = R"(
 cbuffer BoxConstants : register(b0) {
   row_major float4x4 world;
   row_major float4x4 viewProjection;
+  row_major float4x4 lightViewProjection;
   float4 baseColor;
   float4 lightDirection;
   float4 lightColor;
+  float4 shadowParams;
 };
+
+Texture2D shadowMap : register(t0);
+SamplerComparisonState shadowSampler : register(s0);
 
 struct BoxInput {
   float3 position : POSITION;
@@ -81,6 +90,7 @@ struct BoxInput {
 struct BoxOutput {
   float4 position : SV_POSITION;
   float3 normal : NORMAL;
+  float4 shadowPosition : TEXCOORD0;
 };
 
 BoxOutput VsMain(BoxInput input) {
@@ -88,14 +98,35 @@ BoxOutput VsMain(BoxInput input) {
   float4 worldPosition = mul(float4(input.position, 1.0), world);
   output.position = mul(worldPosition, viewProjection);
   output.normal = mul(input.normal, (float3x3)world);
+  output.shadowPosition = mul(worldPosition, lightViewProjection);
   return output;
 }
 
 float4 PsMain(BoxOutput input) : SV_TARGET {
   float3 normal = normalize(input.normal);
   float diffuse = saturate(dot(normal, normalize(lightDirection.xyz)));
+
+  float shadow = 1.0;
+  float3 projected = input.shadowPosition.xyz / input.shadowPosition.w;
+  float2 uv = float2(projected.x * 0.5 + 0.5, 0.5 - projected.y * 0.5);
+  if (projected.z >= 0.0 && projected.z <= 1.0 && uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 &&
+      uv.y <= 1.0) {
+    float reference = projected.z - shadowParams.y;
+    float2 texel = shadowParams.xx;
+    float total = 0.0;
+    [unroll]
+    for (int row = -1; row <= 1; ++row) {
+      [unroll]
+      for (int column = -1; column <= 1; ++column) {
+        total +=
+            shadowMap.SampleCmpLevelZero(shadowSampler, uv + float2(column, row) * texel, reference);
+      }
+    }
+    shadow = total / 9.0;
+  }
+
   float3 ambient = baseColor.rgb * 0.22;
-  float3 direct = baseColor.rgb * lightColor.rgb * diffuse;
+  float3 direct = baseColor.rgb * lightColor.rgb * diffuse * shadow;
   return float4(ambient + direct, 1.0);
 }
 )";
@@ -122,9 +153,11 @@ float4 PsMain() : SV_TARGET {
 struct BoxConstants {
   math::Mat4 world{};
   math::Mat4 viewProjection{};
+  math::Mat4 lightViewProjection{};
   float baseColor[4]{0.0f, 0.0f, 0.0f, 1.0f};
   float lightDirection[4]{0.0f, 0.0f, 0.0f, 0.0f};
   float lightColor[4]{1.0f, 1.0f, 1.0f, 1.0f};
+  float shadowParams[4]{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 struct GridConstants {
@@ -144,6 +177,17 @@ std::vector<float> BuildGridVertices() {
   return vertices;
 }
 
+math::Vec3 SafeLightDirection(const math::Vec3& direction) noexcept {
+  const float lengthSquared = math::Dot(direction, direction);
+  if (lengthSquared < math::kEpsilon) {
+    return math::Vec3{0.0f, 1.0f, 0.0f};
+  }
+  return math::Normalize(direction);
+}
+
+Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
+                           SceneRenderer::Impl& impl);
+
 }
 
 struct SceneRenderer::Impl {
@@ -158,6 +202,7 @@ struct SceneRenderer::Impl {
   std::unique_ptr<RhiBuffer> gridVertices;
   std::unique_ptr<RhiBuffer> boxConstants;
   std::unique_ptr<RhiBuffer> gridConstants;
+  ShadowMap shadowMap;
   std::unique_ptr<RhiTexture> color;
   std::unique_ptr<RhiTexture> depth;
   uint32_t gridVertexCount = 0;
@@ -197,19 +242,38 @@ Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
   return {};
 }
 
+template <typename T>
+Result<std::unique_ptr<T>> CreateShader(RhiDevice& device, const char* source,
+                                        std::unique_ptr<T>& target) {
+  const RhiShaderDesc description{source};
+  auto shader = RhiShader::Create(device, description);
+  if (!shader) {
+    return shader.GetError();
+  }
+  target = std::move(shader).Value();
+  return {};
+}
+
+template <typename T>
+Result<std::unique_ptr<T>> CreatePipeline(RhiDevice& device, const RhiPipelineDesc& description,
+                                          std::unique_ptr<T>& target) {
+  auto pipeline = RhiPipeline::Create(device, description);
+  if (!pipeline) {
+    return pipeline.GetError();
+  }
+  target = std::move(pipeline).Value();
+  return {};
+}
+
 Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
-  const RhiShaderDesc boxShaderDesc{kBoxShader};
-  auto boxShader = RhiShader::Create(device, boxShaderDesc);
-  if (!boxShader) {
-    return boxShader.GetError();
+  Result<void> shaders = CreateShader(device, kBoxShader, impl.boxShader);
+  if (!shaders) {
+    return shaders.GetError();
   }
-  const RhiShaderDesc gridShaderDesc{kGridShader};
-  auto gridShader = RhiShader::Create(device, gridShaderDesc);
-  if (!gridShader) {
-    return gridShader.GetError();
+  shaders = CreateShader(device, kGridShader, impl.gridShader);
+  if (!shaders) {
+    return shaders.GetError();
   }
-  impl.boxShader = std::move(boxShader).Value();
-  impl.gridShader = std::move(gridShader).Value();
 
   auto boxLayout = RhiInputLayout::Create(device, *impl.boxShader, kBoxElements);
   if (!boxLayout) {
@@ -222,21 +286,19 @@ Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
   impl.boxLayout = std::move(boxLayout).Value();
   impl.gridLayout = std::move(gridLayout).Value();
 
-  RhiPipelineDesc boxDesc;
-  boxDesc.cullBack = false;
-  auto boxPipeline = RhiPipeline::Create(device, boxDesc);
-  if (!boxPipeline) {
-    return boxPipeline.GetError();
+  RhiPipelineDesc boxDescription;
+  boxDescription.cullBack = false;
+  Result<void> pipelines = CreatePipeline(device, boxDescription, impl.boxPipeline);
+  if (!pipelines) {
+    return pipelines.GetError();
   }
-  RhiPipelineDesc gridDesc;
-  gridDesc.cullBack = false;
-  gridDesc.depthWrite = false;
-  auto gridPipeline = RhiPipeline::Create(device, gridDesc);
-  if (!gridPipeline) {
-    return gridPipeline.GetError();
+  RhiPipelineDesc gridDescription;
+  gridDescription.cullBack = false;
+  gridDescription.depthWrite = false;
+  pipelines = CreatePipeline(device, gridDescription, impl.gridPipeline);
+  if (!pipelines) {
+    return pipelines.GetError();
   }
-  impl.boxPipeline = std::move(boxPipeline).Value();
-  impl.gridPipeline = std::move(gridPipeline).Value();
 
   auto boxVertices = RhiBuffer::Create(device, RhiBufferKind::Vertex, kCubeVertices,
                                        static_cast<uint32_t>(sizeof(kCubeVertices)));
@@ -249,8 +311,8 @@ Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
     return boxIndices.GetError();
   }
   const std::vector<float> grid = BuildGridVertices();
-  const uint32_t gridBytes = static_cast<uint32_t>(grid.size() * sizeof(float));
-  auto gridVertices = RhiBuffer::Create(device, RhiBufferKind::Vertex, grid.data(), gridBytes);
+  auto gridVertices = RhiBuffer::Create(device, RhiBufferKind::Vertex, grid.data(),
+                                        static_cast<uint32_t>(grid.size() * sizeof(float)));
   if (!gridVertices) {
     return gridVertices.GetError();
   }
@@ -276,14 +338,6 @@ Result<void> Initialize(RhiDevice& device, SceneRenderer::Impl& impl) {
   return {};
 }
 
-math::Vec3 SafeLightDirection(const math::Vec3& direction) noexcept {
-  const float lengthSquared = math::Dot(direction, direction);
-  if (lengthSquared < math::kEpsilon) {
-    return math::Vec3{0.0f, 1.0f, 0.0f};
-  }
-  return math::Normalize(direction);
-}
-
 void BindPipeline(ID3D11DeviceContext* context, const RhiShader& shader,
                   const RhiInputLayout& layout, const RhiPipeline& pipeline) {
   context->IASetInputLayout(static_cast<ID3D11InputLayout*>(layout.Handle()));
@@ -292,6 +346,15 @@ void BindPipeline(ID3D11DeviceContext* context, const RhiShader& shader,
   context->RSSetState(static_cast<ID3D11RasterizerState*>(pipeline.RasterizerState()));
   context->OMSetDepthStencilState(
       static_cast<ID3D11DepthStencilState*>(pipeline.DepthStencilState()), 0);
+}
+
+template <typename T>
+void BindVertexBuffer(ID3D11DeviceContext* context, const std::unique_ptr<T>& buffer,
+                      uint32_t stride) {
+  ID3D11Buffer* handle = static_cast<ID3D11Buffer*>(buffer->Handle());
+  UINT bufferStride = static_cast<UINT>(stride);
+  UINT offset = 0;
+  context->IASetVertexBuffers(0, 1, &handle, &bufferStride, &offset);
 }
 
 }
@@ -319,6 +382,19 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
     }
   }
 
+  const math::Vec3 lightDirection = SafeLightDirection(light.direction);
+
+  ShadowMesh shadowMesh;
+  shadowMesh.vertices = m_impl->boxVertices.get();
+  shadowMesh.vertexStride = static_cast<uint32_t>(sizeof(MeshVertex));
+  shadowMesh.indices = m_impl->boxIndices.get();
+  shadowMesh.indexCount = static_cast<uint32_t>(std::size(kCubeIndices));
+  const Result<void> shadows = m_impl->shadowMap.Render(device, shadowMesh, items, light.direction);
+  if (!shadows) {
+    return shadows.GetError();
+  }
+  const math::Mat4 lightViewProjection = m_impl->shadowMap.LightViewProjection();
+
   auto* context = static_cast<ID3D11DeviceContext*>(device.ContextHandle());
   auto* targetView = static_cast<ID3D11RenderTargetView*>(m_impl->color->RenderTargetView());
   auto* depthView = static_cast<ID3D11DepthStencilView*>(m_impl->depth->DepthStencilView());
@@ -337,25 +413,26 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   context->ClearRenderTargetView(targetView, clear);
   context->ClearDepthStencilView(depthView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-  const math::Mat4 viewProjection = math::Multiply(camera.view, camera.projection);
-  const math::Vec3 lightDirection = SafeLightDirection(light.direction);
-
   BindPipeline(context, *m_impl->boxShader, *m_impl->boxLayout, *m_impl->boxPipeline);
   context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-  ID3D11Buffer* boxVertexBuffer = static_cast<ID3D11Buffer*>(m_impl->boxVertices->Handle());
-  UINT vertexStride = static_cast<UINT>(sizeof(MeshVertex));
-  UINT vertexOffset = 0;
-  context->IASetVertexBuffers(0, 1, &boxVertexBuffer, &vertexStride, &vertexOffset);
+  BindVertexBuffer(context, m_impl->boxVertices, static_cast<uint32_t>(sizeof(MeshVertex)));
   context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(m_impl->boxIndices->Handle()),
                             DXGI_FORMAT_R16_UINT, 0);
   ID3D11Buffer* boxConstantBuffer = static_cast<ID3D11Buffer*>(m_impl->boxConstants->Handle());
   context->VSSetConstantBuffers(0, 1, &boxConstantBuffer);
   context->PSSetConstantBuffers(0, 1, &boxConstantBuffer);
 
+  ID3D11ShaderResourceView* shadowResource =
+      static_cast<ID3D11ShaderResourceView*>(m_impl->shadowMap.ResourceView());
+  ID3D11SamplerState* shadowSampler = static_cast<ID3D11SamplerState*>(m_impl->shadowMap.Sampler());
+  context->PSSetShaderResources(0, 1, &shadowResource);
+  context->PSSetSamplers(0, 1, &shadowSampler);
+
   for (const RenderItem& item : items) {
-    BoxConstants constants{};
+    BoxConstants constants;
     constants.world = item.world;
-    constants.viewProjection = viewProjection;
+    constants.viewProjection = math::Multiply(camera.view, camera.projection);
+    constants.lightViewProjection = lightViewProjection;
     constants.baseColor[0] = item.color.x;
     constants.baseColor[1] = item.color.y;
     constants.baseColor[2] = item.color.z;
@@ -366,6 +443,8 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
     constants.lightColor[0] = light.color.x;
     constants.lightColor[1] = light.color.y;
     constants.lightColor[2] = light.color.z;
+    constants.shadowParams[0] = m_impl->shadowMap.TexelSize();
+    constants.shadowParams[1] = kShadowBias;
     const Result<void> updated =
         m_impl->boxConstants->Update(device, &constants, static_cast<uint32_t>(sizeof(constants)));
     if (!updated) {
@@ -376,17 +455,14 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
 
   BindPipeline(context, *m_impl->gridShader, *m_impl->gridLayout, *m_impl->gridPipeline);
   context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
-  ID3D11Buffer* gridVertexBuffer = static_cast<ID3D11Buffer*>(m_impl->gridVertices->Handle());
-  UINT gridStride = static_cast<UINT>(sizeof(float) * 3);
-  UINT gridOffset = 0;
-  context->IASetVertexBuffers(0, 1, &gridVertexBuffer, &gridStride, &gridOffset);
+  BindVertexBuffer(context, m_impl->gridVertices, static_cast<uint32_t>(sizeof(float) * 3));
   context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
   ID3D11Buffer* gridConstantBuffer = static_cast<ID3D11Buffer*>(m_impl->gridConstants->Handle());
   context->VSSetConstantBuffers(0, 1, &gridConstantBuffer);
   context->PSSetConstantBuffers(0, 1, &gridConstantBuffer);
 
-  GridConstants gridConstants{};
-  gridConstants.viewProjection = viewProjection;
+  GridConstants gridConstants;
+  gridConstants.viewProjection = math::Multiply(camera.view, camera.projection);
   gridConstants.gridColor[0] = 0.20f;
   gridConstants.gridColor[1] = 0.24f;
   gridConstants.gridColor[2] = 0.30f;
