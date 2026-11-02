@@ -1,0 +1,141 @@
+#include <windows.h>
+
+#include <caligo/core/Math.h>
+#include <caligo/render/RhiDevice.h>
+#include <caligo/render/SceneRenderer.h>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <doctest/doctest.h>
+#include <vector>
+
+namespace {
+
+constexpr uint32_t kSize = 64;
+constexpr uint32_t kSmallSize = 32;
+constexpr int kTolerance = 3;
+
+struct Rgb {
+  int red = 0;
+  int green = 0;
+  int blue = 0;
+};
+
+int ToByte(float value) {
+  return static_cast<int>(std::lround(static_cast<double>(value) * 255.0));
+}
+
+Rgb LitColor(const caligo::math::Vec3& base, const caligo::math::Vec3& light) {
+  return Rgb{ToByte(base.x * 0.22f + base.x * light.x), ToByte(base.y * 0.22f + base.y * light.y),
+             ToByte(base.z * 0.22f + base.z * light.z)};
+}
+
+Rgb BackgroundColor() {
+  return Rgb{ToByte(0.086f), ToByte(0.098f), ToByte(0.118f)};
+}
+
+Rgb Sample(const std::vector<uint8_t>& pixels, uint32_t size, uint32_t x, uint32_t y) {
+  const size_t index = (static_cast<size_t>(y) * size + x) * 4;
+  return Rgb{pixels[index], pixels[index + 1], pixels[index + 2]};
+}
+
+void CheckColor(const Rgb& actual, const Rgb& expected) {
+  CHECK(std::abs(actual.red - expected.red) <= kTolerance);
+  CHECK(std::abs(actual.green - expected.green) <= kTolerance);
+  CHECK(std::abs(actual.blue - expected.blue) <= kTolerance);
+}
+
+std::vector<caligo::render::RenderItem> BuildScene(const caligo::math::Vec3& frontColor,
+                                                   const caligo::math::Vec3& backColor) {
+  std::vector<caligo::render::RenderItem> items(2);
+  items[0].world = caligo::math::Identity();
+  items[0].color = frontColor;
+  items[1].world = caligo::math::ComposeTransform(caligo::math::Vec3{0.0f, 0.0f, -2.0f},
+                                                  caligo::math::IdentityRotation(),
+                                                  caligo::math::Vec3{1.0f, 1.0f, 1.0f});
+  items[1].color = backColor;
+  return items;
+}
+
+}
+
+TEST_CASE("o renderizador de cena desenha cubos sólidos e iluminados") {
+  auto device = caligo::render::RhiDevice::Create(true);
+  REQUIRE(device.HasValue());
+  REQUIRE(device.Value()->IsWarp());
+
+  const caligo::math::Vec3 frontColor{0.72f, 0.75f, 0.80f};
+  const caligo::math::Vec3 backColor{1.0f, 0.10f, 0.10f};
+  const std::vector<caligo::render::RenderItem> items = BuildScene(frontColor, backColor);
+
+  caligo::render::RenderCamera camera;
+  camera.view = caligo::math::LookAt(caligo::math::Vec3{0.0f, 0.0f, 4.0f},
+                                     caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                     caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+  camera.projection = caligo::math::Perspective(55.0f, 1.0f, 0.1f, 100.0f);
+
+  caligo::render::RenderLight light;
+  light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
+  light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
+
+  caligo::render::SceneRenderer renderer;
+  const caligo::Result<void> rendered =
+      renderer.Render(*device.Value(), items, camera, light, kSize, kSize);
+  REQUIRE(rendered.HasValue());
+  CHECK(renderer.Width() == kSize);
+  CHECK(renderer.Height() == kSize);
+  REQUIRE(renderer.ColorView() != nullptr);
+
+  const caligo::Result<std::vector<uint8_t>> frame = renderer.ReadColor();
+  REQUIRE(frame.HasValue());
+  REQUIRE(frame.Value().size() == static_cast<size_t>(kSize) * kSize * 4);
+
+  const Rgb lit = LitColor(frontColor, light.color);
+  const Rgb background = BackgroundColor();
+  CheckColor(Sample(frame.Value(), kSize, 28, 28), lit);
+  CheckColor(Sample(frame.Value(), kSize, 35, 35), lit);
+  CheckColor(Sample(frame.Value(), kSize, 3, 3), background);
+  CheckColor(Sample(frame.Value(), kSize, 60, 3), background);
+}
+
+TEST_CASE("o renderizador de cena respeita a profundidade e é determinístico") {
+  auto device = caligo::render::RhiDevice::Create(true);
+  REQUIRE(device.HasValue());
+
+  const caligo::math::Vec3 frontColor{0.72f, 0.75f, 0.80f};
+  const caligo::math::Vec3 backColor{1.0f, 0.10f, 0.10f};
+  const std::vector<caligo::render::RenderItem> items = BuildScene(frontColor, backColor);
+
+  caligo::render::RenderCamera camera;
+  camera.view = caligo::math::LookAt(caligo::math::Vec3{0.0f, 0.0f, 4.0f},
+                                     caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                     caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+  camera.projection = caligo::math::Perspective(55.0f, 1.0f, 0.1f, 100.0f);
+
+  caligo::render::RenderLight light;
+  light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
+  light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
+
+  caligo::render::SceneRenderer renderer;
+  REQUIRE(renderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
+  const caligo::Result<std::vector<uint8_t>> first = renderer.ReadColor();
+  REQUIRE(first.HasValue());
+
+  const Rgb occluded = Sample(first.Value(), kSize, 28, 28);
+  CheckColor(occluded, LitColor(frontColor, light.color));
+
+  REQUIRE(renderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
+  const caligo::Result<std::vector<uint8_t>> second = renderer.ReadColor();
+  REQUIRE(second.HasValue());
+  REQUIRE(first.Value().size() == second.Value().size());
+  CHECK(first.Value() == second.Value());
+
+  REQUIRE(
+      renderer.Render(*device.Value(), items, camera, light, kSmallSize, kSmallSize).HasValue());
+  CHECK(renderer.Width() == kSmallSize);
+  CHECK(renderer.Height() == kSmallSize);
+  const caligo::Result<std::vector<uint8_t>> resized = renderer.ReadColor();
+  REQUIRE(resized.HasValue());
+  REQUIRE(resized.Value().size() == static_cast<size_t>(kSmallSize) * kSmallSize * 4);
+  CheckColor(Sample(resized.Value(), kSmallSize, 14, 14), LitColor(frontColor, light.color));
+}

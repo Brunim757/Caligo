@@ -2,7 +2,9 @@
 #include <ImGuizmo.h>
 #include <algorithm>
 #include <array>
+#include <caligo/core/Log.h>
 #include <caligo/editor/ViewportCanvas.h>
+#include <caligo/render/RhiDevice.h>
 #include <cmath>
 #include <format>
 #include <imgui.h>
@@ -17,7 +19,6 @@ constexpr float kMarkerRadius = 4.0f;
 constexpr float kMarkerSelectRadius = 14.0f;
 constexpr float kMinCameraDistance = 0.75f;
 constexpr float kMaxCameraDistance = 3000.0f;
-constexpr float kGridSize = 10.0f;
 constexpr float kOverlayHeight = 34.0f;
 
 constexpr std::array<math::Vec3, 8> kBoundsCorners = {
@@ -429,6 +430,60 @@ void DrawOverlay(EditorState& state, const ImVec2& origin, const ImVec2& size) {
   }
 }
 
+std::vector<render::RenderItem> BuildRenderItems(const EditorState& state) {
+  const std::vector<scene::Entity>& entities = state.scene.Entities();
+  std::vector<scene::EntityId> parents;
+  parents.reserve(entities.size());
+  for (const scene::Entity& entity : entities) {
+    if (entity.parent != scene::kNoEntity) {
+      parents.push_back(entity.parent);
+    }
+  }
+  std::sort(parents.begin(), parents.end());
+
+  std::vector<render::RenderItem> items;
+  items.reserve(entities.size());
+  for (const scene::Entity& entity : entities) {
+    const bool container = entity.parent == scene::kNoEntity &&
+                           std::binary_search(parents.begin(), parents.end(), entity.id);
+    if (container) {
+      continue;
+    }
+    render::RenderItem item;
+    item.world = state.scene.WorldMatrix(entity.id);
+    items.push_back(item);
+  }
+  return items;
+}
+
+bool DrawScene(EditorState& state, const math::Mat4& view, const math::Mat4& projection,
+               const ImVec2& canvasSize) {
+  render::RhiDevice* device = state.graphics.Rhi();
+  if (device == nullptr) {
+    return false;
+  }
+
+  const uint32_t width = static_cast<uint32_t>(std::max(1.0f, std::round(canvasSize.x)));
+  const uint32_t height = static_cast<uint32_t>(std::max(1.0f, std::round(canvasSize.y)));
+
+  render::RenderCamera camera;
+  camera.view = view;
+  camera.projection = projection;
+
+  const std::vector<render::RenderItem> items = BuildRenderItems(state);
+  const Result<void> rendered =
+      state.sceneRenderer.Render(*device, items, camera, render::RenderLight{}, width, height);
+  if (!rendered) {
+    if (!state.viewportErrorLogged) {
+      CALIGO_LOG_ERROR("não foi possível desenhar a cena: {}", rendered.GetError().message);
+      state.viewportErrorLogged = true;
+    }
+    return false;
+  }
+  state.viewportErrorLogged = false;
+  return true;
+}
+
 }
 
 void DrawViewport(EditorState& state) {
@@ -456,9 +511,6 @@ void DrawViewport(EditorState& state) {
   ImDrawList* drawList = ImGui::GetWindowDrawList();
   drawList->PushClipRect(
       canvasOrigin, ImVec2(canvasOrigin.x + canvasSize.x, canvasOrigin.y + canvasSize.y), true);
-  drawList->AddRectFilled(canvasOrigin,
-                          ImVec2(canvasOrigin.x + canvasSize.x, canvasOrigin.y + canvasSize.y),
-                          IM_COL32(22, 25, 31, 255));
 
   HandleNavigation(state, hovered);
   HandleShortcuts(state, hovered);
@@ -467,12 +519,18 @@ void DrawViewport(EditorState& state) {
   const math::Mat4 view = state.camera.ViewMatrix();
   const math::Mat4 projection = state.camera.ProjectionMatrix(aspect);
 
+  const ImVec2 canvasMax{canvasOrigin.x + canvasSize.x, canvasOrigin.y + canvasSize.y};
+  if (DrawScene(state, view, projection, canvasSize)) {
+    const ImTextureID texture =
+        static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(state.sceneRenderer.ColorView()));
+    drawList->AddImage(texture, canvasOrigin, canvasMax);
+  } else {
+    drawList->AddRectFilled(canvasOrigin, canvasMax, IM_COL32(22, 25, 31, 255));
+  }
+
   ImGuizmo::SetRect(canvasOrigin.x, canvasOrigin.y, canvasSize.x, canvasSize.y);
   ImGuizmo::SetOrthographic(false);
   ImGuizmo::SetDrawlist(drawList);
-
-  const math::Mat4 identity = math::Identity();
-  ImGuizmo::DrawGrid(&view._11, &projection._11, &identity._11, kGridSize);
 
   const std::vector<ScreenMarker> markers =
       BuildMarkers(state, view, projection, canvasOrigin, canvasSize);

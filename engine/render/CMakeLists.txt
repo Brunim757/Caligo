@@ -1,9 +1,13 @@
 add_library(caligo_render STATIC
   src/GraphicsDevice.cpp
   src/ImageDiff.cpp
+  src/RhiBuffer.cpp
   src/RhiDevice.cpp
+  src/RhiInputLayout.cpp
+  src/RhiPipeline.cpp
   src/RhiShader.cpp
   src/RhiTexture.cpp
+  src/SceneRenderer.cpp
 )
 
 target_include_directories(caligo_render PUBLIC include)

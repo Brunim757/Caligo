@@ -15,6 +15,7 @@ namespace caligo::render {
 using Microsoft::WRL::ComPtr;
 
 struct RhiShader::Impl {
+  ComPtr<ID3DBlob> vertexBytecode;
   ComPtr<ID3D11VertexShader> vertexShader;
   ComPtr<ID3D11PixelShader> pixelShader;
 };
@@ -63,6 +64,7 @@ Result<std::unique_ptr<RhiShader>> RhiShader::Create(RhiDevice& device, const Rh
   }
 
   std::unique_ptr<RhiShader> shader(new RhiShader());
+  shader->m_impl->vertexBytecode = vertexCode.Value();
   HRESULT result = nativeDevice->CreateVertexShader(vertexCode.Value()->GetBufferPointer(),
                                                     vertexCode.Value()->GetBufferSize(), nullptr,
                                                     shader->m_impl->vertexShader.GetAddressOf());
@@ -88,6 +90,14 @@ void* RhiShader::VertexShaderHandle() const noexcept {
 
 void* RhiShader::PixelShaderHandle() const noexcept {
   return m_impl->pixelShader.Get();
+}
+
+const void* RhiShader::VertexBytecode() const noexcept {
+  return m_impl->vertexBytecode != nullptr ? m_impl->vertexBytecode->GetBufferPointer() : nullptr;
+}
+
+size_t RhiShader::VertexBytecodeSize() const noexcept {
+  return m_impl->vertexBytecode != nullptr ? m_impl->vertexBytecode->GetBufferSize() : 0;
 }
 
 }

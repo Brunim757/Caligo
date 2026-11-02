@@ -2,6 +2,7 @@
 
 #include <caligo/core/Result.h>
 #include <caligo/render/RhiTypes.h>
+#include <cstddef>
 #include <memory>
 
 namespace caligo::render {
@@ -25,6 +26,8 @@ public:
 
   [[nodiscard]] void* VertexShaderHandle() const noexcept;
   [[nodiscard]] void* PixelShaderHandle() const noexcept;
+  [[nodiscard]] const void* VertexBytecode() const noexcept;
+  [[nodiscard]] size_t VertexBytecodeSize() const noexcept;
 
 private:
   std::unique_ptr<Impl> m_impl;

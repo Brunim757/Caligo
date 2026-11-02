@@ -12,6 +12,7 @@ add_executable(caligo_tests
   script/test_script_host.cpp
   render/test_image.cpp
   render/test_offscreen.cpp
+  render/test_scene_renderer.cpp
   editor/test_console.cpp
   editor/test_viewport.cpp
 )

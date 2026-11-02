@@ -6,6 +6,10 @@ namespace caligo::render {
 
 enum class RhiFormat : uint8_t { Rgba8Unorm, Depth32Float };
 
+enum class RhiVertexFormat : uint8_t { Float32x2, Float32x3, Float32x4 };
+
+enum class RhiBufferKind : uint8_t { Vertex, Index, Constant };
+
 struct RhiTextureDesc {
   uint32_t width = 0;
   uint32_t height = 0;
@@ -18,6 +22,13 @@ struct RhiShaderDesc {
   const char* source = nullptr;
   const char* vertexEntry = "VsMain";
   const char* pixelEntry = "PsMain";
+};
+
+struct RhiVertexElement {
+  const char* semantic = "POSITION";
+  uint32_t semanticIndex = 0;
+  RhiVertexFormat format = RhiVertexFormat::Float32x3;
+  uint32_t offset = 0;
 };
 
 }
