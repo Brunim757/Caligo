@@ -10,6 +10,9 @@ add_executable(caligo_tests
   scene/test_scene.cpp
   scene/test_serialization.cpp
   script/test_script_host.cpp
+  audio/test_clip.cpp
+  audio/test_device.cpp
+  audio/test_mixer.cpp
   render/test_image.cpp
   render/test_offscreen.cpp
   render/test_render_graph.cpp
@@ -23,6 +26,7 @@ target_link_libraries(caligo_tests PRIVATE
   caligo_platform
   caligo_scene
   caligo_script
+  caligo_audio
   caligo_render
   caligo_editor
   doctest::doctest

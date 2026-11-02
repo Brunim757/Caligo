@@ -47,6 +47,13 @@ FetchContent_Declare(
   GIT_TAG 1.10
   GIT_SHALLOW TRUE
 )
+FetchContent_Declare(
+  miniaudio
+  GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+  GIT_TAG 0.11.26
+  GIT_SHALLOW TRUE
+  SOURCE_SUBDIR cmake
+)
 
 if(CALIGO_BUILD_TESTS)
   FetchContent_Declare(
@@ -55,9 +62,9 @@ if(CALIGO_BUILD_TESTS)
     GIT_TAG v2.5.3
     GIT_SHALLOW TRUE
   )
-  FetchContent_MakeAvailable(DirectXMath enkiTS nlohmann_json imgui imguizmo doctest)
+  FetchContent_MakeAvailable(DirectXMath enkiTS nlohmann_json imgui imguizmo miniaudio doctest)
 else()
-  FetchContent_MakeAvailable(DirectXMath enkiTS nlohmann_json imgui imguizmo)
+  FetchContent_MakeAvailable(DirectXMath enkiTS nlohmann_json imgui imguizmo miniaudio)
 endif()
 
 add_library(imgui STATIC
@@ -84,3 +91,6 @@ target_link_libraries(imgui PUBLIC d3d11 dxgi)
 target_link_libraries(imguizmo PUBLIC imgui)
 target_include_directories(imguizmo PUBLIC ${imguizmo_SOURCE_DIR})
 target_compile_definitions(imguizmo PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+
+add_library(miniaudio INTERFACE)
+target_include_directories(miniaudio INTERFACE ${miniaudio_SOURCE_DIR})
