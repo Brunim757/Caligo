@@ -44,7 +44,7 @@ Result<void> CreateBuffer(ID3D11Device* device, ID3D11DeviceContext* context, Rh
   D3D11_SUBRESOURCE_DATA initial{};
   initial.pSysMem = data;
 
-  const HRESULT result = device->CreateBuffer(description, data != nullptr ? &initial : nullptr,
+  const HRESULT result = device->CreateBuffer(&description, data != nullptr ? &initial : nullptr,
                                               impl.buffer.GetAddressOf());
   if (FAILED(result)) {
     return Error{Failure("ID3D11Device::CreateBuffer", result), 1};
