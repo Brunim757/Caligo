@@ -7,6 +7,7 @@
 #include <caligo/editor/ConsoleBuffer.h>
 #include <caligo/platform/Window.h>
 #include <caligo/render/GraphicsDevice.h>
+#include <caligo/render/SceneRenderer.h>
 #include <caligo/scene/Scene.h>
 #include <caligo/script/ScriptHost.h>
 #include <cstdint>
@@ -48,6 +49,8 @@ struct PlaySession {
 struct EditorState {
   platform::Window* window = nullptr;
   render::GraphicsDevice graphics;
+  render::SceneRenderer sceneRenderer;
+  bool viewportErrorLogged = false;
   scene::Scene scene;
   scene::EntityId selected = scene::kNoEntity;
   std::filesystem::path scenePath;
