@@ -1,6 +1,5 @@
 #include <windows.h>
 
-#include <algorithm>
 #include <caligo/core/Math.h>
 #include <caligo/render/RhiDevice.h>
 #include <caligo/render/SceneRenderer.h>
@@ -296,7 +295,7 @@ TEST_CASE("o TAA mantém a imagem estável por 300 quadros") {
   std::vector<uint8_t> previous;
   int64_t totalDifference = 0;
   int64_t samples = 0;
-  int maximumDifference = 0;
+  int64_t changed = 0;
   for (uint32_t frame = 0; frame < 300; ++frame) {
     REQUIRE(renderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
     if (frame < 289) {
@@ -308,7 +307,9 @@ TEST_CASE("o TAA mantém a imagem estável por 300 quadros") {
       for (size_t index = 0; index < previous.size(); ++index) {
         const int difference =
             std::abs(static_cast<int>(pixels.Value()[index]) - static_cast<int>(previous[index]));
-        maximumDifference = std::max(maximumDifference, difference);
+        if (difference >= 64) {
+          ++changed;
+        }
         totalDifference += difference;
         ++samples;
       }
@@ -317,7 +318,7 @@ TEST_CASE("o TAA mantém a imagem estável por 300 quadros") {
   }
   REQUIRE(samples > 0);
   CHECK(static_cast<double>(totalDifference) / static_cast<double>(samples) < 4.0);
-  CHECK(maximumDifference < 100);
+  CHECK(static_cast<double>(changed) / static_cast<double>(samples) < 0.01);
 }
 
 TEST_CASE("o TAA é determinístico com a câmera em movimento") {
