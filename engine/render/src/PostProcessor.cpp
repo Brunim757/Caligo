@@ -1,5 +1,6 @@
 #include <windows.h>
 
+#include "FullscreenQuad.h"
 #include "RenderPassUtil.h"
 #include <algorithm>
 #include <caligo/render/PostProcessor.h>
@@ -14,23 +15,6 @@
 namespace caligo::render {
 
 namespace {
-
-struct PostVertex {
-  float position[2];
-  float uv[2];
-};
-
-constexpr PostVertex kQuadVertices[] = {
-    {-1.0f, -1.0f, 0.0f, 1.0f},
-    {1.0f, -1.0f, 1.0f, 1.0f},
-    {-1.0f, 1.0f, 0.0f, 0.0f},
-    {1.0f, 1.0f, 1.0f, 0.0f},
-};
-
-constexpr RhiVertexElement kQuadElements[] = {
-    {"POSITION", 0, RhiVertexFormat::Float32x2, 0},
-    {"TEXCOORD", 0, RhiVertexFormat::Float32x2, 8},
-};
 
 constexpr char kBrightShader[] = R"(
 cbuffer PostConstants : register(b0) {
@@ -204,15 +188,17 @@ Result<void> CreateResources(RhiDevice& device, PostProcessor::Impl& impl) {
     return created.GetError();
   }
 
-  auto brightLayout = RhiInputLayout::Create(device, *impl.brightShader, kQuadElements);
+  auto brightLayout =
+      RhiInputLayout::Create(device, *impl.brightShader, detail::kFullscreenElements);
   if (!brightLayout) {
     return brightLayout.GetError();
   }
-  auto blurLayout = RhiInputLayout::Create(device, *impl.blurShader, kQuadElements);
+  auto blurLayout = RhiInputLayout::Create(device, *impl.blurShader, detail::kFullscreenElements);
   if (!blurLayout) {
     return blurLayout.GetError();
   }
-  auto compositeLayout = RhiInputLayout::Create(device, *impl.compositeShader, kQuadElements);
+  auto compositeLayout =
+      RhiInputLayout::Create(device, *impl.compositeShader, detail::kFullscreenElements);
   if (!compositeLayout) {
     return compositeLayout.GetError();
   }
@@ -229,8 +215,8 @@ Result<void> CreateResources(RhiDevice& device, PostProcessor::Impl& impl) {
     return created.GetError();
   }
 
-  auto quadVertices = RhiBuffer::Create(device, RhiBufferKind::Vertex, kQuadVertices,
-                                        static_cast<uint32_t>(sizeof(kQuadVertices)));
+  auto quadVertices = RhiBuffer::Create(device, RhiBufferKind::Vertex, detail::kFullscreenVertices,
+                                        static_cast<uint32_t>(sizeof(detail::kFullscreenVertices)));
   if (!quadVertices) {
     return quadVertices.GetError();
   }
@@ -325,7 +311,7 @@ Result<void> PostProcessor::Apply(RhiDevice& device, void* sourceView, void* out
   ID3D11Buffer* constantBuffer = static_cast<ID3D11Buffer*>(m_impl->constants->Handle());
   ID3D11SamplerState* sampler = static_cast<ID3D11SamplerState*>(m_impl->sampler->Handle());
   ID3D11Buffer* vertexBuffer = static_cast<ID3D11Buffer*>(m_impl->quadVertices->Handle());
-  UINT stride = static_cast<UINT>(sizeof(PostVertex));
+  UINT stride = static_cast<UINT>(sizeof(detail::FullscreenVertex));
   UINT offset = 0;
   context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
   context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
@@ -354,7 +340,7 @@ Result<void> PostProcessor::Apply(RhiDevice& device, void* sourceView, void* out
   }
   ID3D11ShaderResourceView* sceneResource = static_cast<ID3D11ShaderResourceView*>(sourceView);
   context->PSSetShaderResources(0, 1, &sceneResource);
-  context->Draw(static_cast<UINT>(std::size(kQuadVertices)), 0);
+  context->Draw(static_cast<UINT>(std::size(detail::kFullscreenVertices)), 0);
 
   bindTarget(secondTarget, bloomWidth, bloomHeight);
   detail::BindPipeline(context, *m_impl->blurShader, *m_impl->blurLayout, *m_impl->pipeline);
@@ -367,7 +353,7 @@ Result<void> PostProcessor::Apply(RhiDevice& device, void* sourceView, void* out
   ID3D11ShaderResourceView* firstResource =
       static_cast<ID3D11ShaderResourceView*>(m_impl->bloomFirst->ShaderResourceView());
   context->PSSetShaderResources(0, 1, &firstResource);
-  context->Draw(static_cast<UINT>(std::size(kQuadVertices)), 0);
+  context->Draw(static_cast<UINT>(std::size(detail::kFullscreenVertices)), 0);
 
   bindTarget(firstTarget, bloomWidth, bloomHeight);
   PostConstants verticalConstants;
@@ -379,7 +365,7 @@ Result<void> PostProcessor::Apply(RhiDevice& device, void* sourceView, void* out
   ID3D11ShaderResourceView* secondResource =
       static_cast<ID3D11ShaderResourceView*>(m_impl->bloomSecond->ShaderResourceView());
   context->PSSetShaderResources(0, 1, &secondResource);
-  context->Draw(static_cast<UINT>(std::size(kQuadVertices)), 0);
+  context->Draw(static_cast<UINT>(std::size(detail::kFullscreenVertices)), 0);
 
   bindTarget(outputTarget, width, height);
   detail::BindPipeline(context, *m_impl->compositeShader, *m_impl->compositeLayout,
@@ -393,7 +379,7 @@ Result<void> PostProcessor::Apply(RhiDevice& device, void* sourceView, void* out
   }
   ID3D11ShaderResourceView* compositeViews[2] = {sceneResource, firstResource};
   context->PSSetShaderResources(0, 2, compositeViews);
-  context->Draw(static_cast<UINT>(std::size(kQuadVertices)), 0);
+  context->Draw(static_cast<UINT>(std::size(detail::kFullscreenVertices)), 0);
 
   ID3D11ShaderResourceView* nullViews[2] = {nullptr, nullptr};
   context->PSSetShaderResources(0, 2, nullViews);

@@ -11,6 +11,7 @@ add_library(caligo_render STATIC
   src/RhiTexture.cpp
   src/SceneRenderer.cpp
   src/ShadowMap.cpp
+  src/TaaRenderer.cpp
 )
 
 target_include_directories(caligo_render PUBLIC include)

@@ -1,5 +1,6 @@
 #include <windows.h>
 
+#include <algorithm>
 #include <caligo/core/Math.h>
 #include <caligo/render/RhiDevice.h>
 #include <caligo/render/SceneRenderer.h>
@@ -69,6 +70,36 @@ std::vector<caligo::render::RenderItem> BuildScene(const caligo::math::Vec3& fro
   return items;
 }
 
+std::vector<uint8_t> RunCameraSequence(caligo::render::RhiDevice& device,
+                                       const std::vector<caligo::render::RenderItem>& items) {
+  caligo::render::RenderCamera camera;
+  camera.projection = caligo::math::Perspective(55.0f, 1.0f, 0.1f, 100.0f);
+
+  caligo::render::RenderLight light;
+  light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
+  light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
+
+  caligo::render::SceneRenderer renderer;
+  std::vector<uint8_t> last;
+  for (uint32_t frame = 0; frame < 60; ++frame) {
+    const float offset = std::sin(static_cast<float>(frame) * 0.05f) * 0.3f;
+    camera.view = caligo::math::LookAt(caligo::math::Vec3{offset, 0.0f, 4.0f},
+                                       caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                       caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+    const caligo::Result<void> rendered =
+        renderer.Render(device, items, camera, light, kSize, kSize);
+    if (!rendered) {
+      return {};
+    }
+    const caligo::Result<std::vector<uint8_t>> pixels = renderer.ReadColor();
+    if (!pixels) {
+      return {};
+    }
+    last = pixels.Value();
+  }
+  return last;
+}
+
 }
 
 TEST_CASE("o renderizador de cena desenha cubos sólidos e iluminados") {
@@ -128,25 +159,26 @@ TEST_CASE("o renderizador de cena respeita a profundidade e é determinístico")
   light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
   light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
 
-  caligo::render::SceneRenderer renderer;
-  REQUIRE(renderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
-  const caligo::Result<std::vector<uint8_t>> first = renderer.ReadColor();
+  caligo::render::SceneRenderer firstRenderer;
+  REQUIRE(firstRenderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
+  const caligo::Result<std::vector<uint8_t>> first = firstRenderer.ReadColor();
   REQUIRE(first.HasValue());
 
   const Rgb occluded = Sample(first.Value(), kSize, 28, 28);
   CheckColor(occluded, LitColor(frontColor, light.color));
 
-  REQUIRE(renderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
-  const caligo::Result<std::vector<uint8_t>> second = renderer.ReadColor();
+  caligo::render::SceneRenderer secondRenderer;
+  REQUIRE(secondRenderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
+  const caligo::Result<std::vector<uint8_t>> second = secondRenderer.ReadColor();
   REQUIRE(second.HasValue());
   REQUIRE(first.Value().size() == second.Value().size());
   CHECK(first.Value() == second.Value());
 
-  REQUIRE(
-      renderer.Render(*device.Value(), items, camera, light, kSmallSize, kSmallSize).HasValue());
-  CHECK(renderer.Width() == kSmallSize);
-  CHECK(renderer.Height() == kSmallSize);
-  const caligo::Result<std::vector<uint8_t>> resized = renderer.ReadColor();
+  REQUIRE(firstRenderer.Render(*device.Value(), items, camera, light, kSmallSize, kSmallSize)
+              .HasValue());
+  CHECK(firstRenderer.Width() == kSmallSize);
+  CHECK(firstRenderer.Height() == kSmallSize);
+  const caligo::Result<std::vector<uint8_t>> resized = firstRenderer.ReadColor();
   REQUIRE(resized.HasValue());
   REQUIRE(resized.Value().size() == static_cast<size_t>(kSmallSize) * kSmallSize * 4);
   CheckColor(Sample(resized.Value(), kSmallSize, 14, 14), LitColor(frontColor, light.color));
@@ -241,4 +273,63 @@ TEST_CASE("o pos-processamento espalha o brilho de objetos intensos") {
   const int bloomLuminance = bloomPixel.red + bloomPixel.green + bloomPixel.blue;
   CHECK(backgroundLuminance < 300);
   CHECK(bloomLuminance > backgroundLuminance + 30);
+}
+
+TEST_CASE("o TAA mantém a imagem estável por 300 quadros") {
+  auto device = caligo::render::RhiDevice::Create(true);
+  REQUIRE(device.HasValue());
+
+  const std::vector<caligo::render::RenderItem> items =
+      BuildScene(caligo::math::Vec3{0.72f, 0.75f, 0.80f}, caligo::math::Vec3{1.0f, 0.10f, 0.10f});
+
+  caligo::render::RenderCamera camera;
+  camera.view = caligo::math::LookAt(caligo::math::Vec3{0.0f, 0.0f, 4.0f},
+                                     caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                     caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+  camera.projection = caligo::math::Perspective(55.0f, 1.0f, 0.1f, 100.0f);
+
+  caligo::render::RenderLight light;
+  light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
+  light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
+
+  caligo::render::SceneRenderer renderer;
+  std::vector<uint8_t> previous;
+  int64_t totalDifference = 0;
+  int64_t samples = 0;
+  int maximumDifference = 0;
+  for (uint32_t frame = 0; frame < 300; ++frame) {
+    REQUIRE(renderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
+    if (frame < 289) {
+      continue;
+    }
+    const caligo::Result<std::vector<uint8_t>> pixels = renderer.ReadColor();
+    REQUIRE(pixels.HasValue());
+    if (!previous.empty()) {
+      for (size_t index = 0; index < previous.size(); ++index) {
+        const int difference =
+            std::abs(static_cast<int>(pixels.Value()[index]) - static_cast<int>(previous[index]));
+        maximumDifference = std::max(maximumDifference, difference);
+        totalDifference += difference;
+        ++samples;
+      }
+    }
+    previous = pixels.Value();
+  }
+  REQUIRE(samples > 0);
+  CHECK(static_cast<double>(totalDifference) / static_cast<double>(samples) < 4.0);
+  CHECK(maximumDifference < 100);
+}
+
+TEST_CASE("o TAA é determinístico com a câmera em movimento") {
+  auto device = caligo::render::RhiDevice::Create(true);
+  REQUIRE(device.HasValue());
+
+  const std::vector<caligo::render::RenderItem> items =
+      BuildScene(caligo::math::Vec3{0.72f, 0.75f, 0.80f}, caligo::math::Vec3{1.0f, 0.10f, 0.10f});
+
+  const std::vector<uint8_t> first = RunCameraSequence(*device.Value(), items);
+  const std::vector<uint8_t> second = RunCameraSequence(*device.Value(), items);
+  REQUIRE(!first.empty());
+  REQUIRE(first.size() == second.size());
+  CHECK(first == second);
 }

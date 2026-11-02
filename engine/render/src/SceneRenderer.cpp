@@ -10,6 +10,7 @@
 #include <caligo/render/RhiTexture.h>
 #include <caligo/render/SceneRenderer.h>
 #include <caligo/render/ShadowMap.h>
+#include <caligo/render/TaaRenderer.h>
 #include <cmath>
 #include <d3d11.h>
 #include <iterator>
@@ -186,6 +187,17 @@ math::Vec3 SafeLightDirection(const math::Vec3& direction) noexcept {
   return math::Normalize(direction);
 }
 
+float Halton(uint32_t index, uint32_t base) noexcept {
+  float result = 0.0f;
+  float fraction = 1.0f;
+  while (index > 0) {
+    fraction /= static_cast<float>(base);
+    result += fraction * static_cast<float>(index % base);
+    index /= base;
+  }
+  return result;
+}
+
 Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
                            SceneRenderer::Impl& impl);
 
@@ -205,10 +217,12 @@ struct SceneRenderer::Impl {
   std::unique_ptr<RhiBuffer> gridConstants;
   ShadowMap shadowMap;
   PostProcessor post;
+  TaaRenderer taa;
   std::unique_ptr<RhiTexture> hdrColor;
   std::unique_ptr<RhiTexture> color;
   std::unique_ptr<RhiTexture> depth;
   uint32_t gridVertexCount = 0;
+  uint32_t frameIndex = 0;
   uint32_t width = 0;
   uint32_t height = 0;
   bool initialized = false;
@@ -394,7 +408,14 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   context->ClearRenderTargetView(targetView, clear);
   context->ClearDepthStencilView(depthView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-  const math::Mat4 viewProjection = math::Multiply(camera.view, camera.projection);
+  ++m_impl->frameIndex;
+  const float jitterX = (Halton(m_impl->frameIndex, 2) - 0.5f) * 2.0f / static_cast<float>(width);
+  const float jitterY = (Halton(m_impl->frameIndex, 3) - 0.5f) * 2.0f / static_cast<float>(height);
+  math::Mat4 projection = camera.projection;
+  projection._31 += jitterX;
+  projection._32 -= jitterY;
+  const math::Mat4 viewProjection = math::Multiply(camera.view, projection);
+  const math::Mat4 inverseViewProjection = math::Inverse(viewProjection);
 
   detail::BindPipeline(context, *m_impl->boxShader, *m_impl->boxLayout, *m_impl->boxPipeline);
   context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -457,9 +478,14 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   }
   context->Draw(m_impl->gridVertexCount, 0);
 
-  void* sourceView = m_impl->hdrColor->ShaderResourceView();
-  void* outputView = m_impl->color->RenderTargetView();
-  const Result<void> post = m_impl->post.Apply(device, sourceView, outputView, width, height);
+  const Result<void> resolved = m_impl->taa.Apply(
+      device, m_impl->hdrColor->ShaderResourceView(), m_impl->depth->ShaderResourceView(),
+      inverseViewProjection, viewProjection, width, height);
+  if (!resolved) {
+    return resolved.GetError();
+  }
+  const Result<void> post = m_impl->post.Apply(device, m_impl->taa.ResultView(),
+                                               m_impl->color->RenderTargetView(), width, height);
   if (!post) {
     return post.GetError();
   }
