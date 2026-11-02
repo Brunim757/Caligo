@@ -331,10 +331,9 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   const RenderGraph::ResourceId depth = graph.CreateTexture(depthDescription);
   const RenderGraph::ResourceId finalColor = graph.ImportTexture(*m_impl->color);
 
-  const RenderGraph::PassId shadowPass =
-      graph.AddPass([this, &device, mesh, items, light](RenderGraphContext&) {
-        return m_impl->shadowMap.Render(device, mesh, items, light.direction);
-      });
+  graph.AddPass([this, &device, mesh, items, light](RenderGraphContext&) {
+    return m_impl->shadowMap.Render(device, mesh, items, light.direction);
+  });
 
   const RenderGraph::PassId gbufferPass =
       graph.AddPass([this, &device, mesh, items, viewProjection, albedo, normal,

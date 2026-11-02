@@ -20,6 +20,16 @@ bool SameDesc(const RenderGraphTextureDesc& left, const RenderGraphTextureDesc& 
          left.depthStencil == right.depthStencil;
 }
 
+RhiTextureDesc ToTextureDesc(const RenderGraphTextureDesc& desc) {
+  RhiTextureDesc texture;
+  texture.width = desc.width;
+  texture.height = desc.height;
+  texture.format = desc.format;
+  texture.depthStencil = desc.depthStencil;
+  texture.renderTarget = !desc.depthStencil;
+  return texture;
+}
+
 }
 
 RenderGraphContext::RenderGraphContext(RhiDevice& device,
@@ -186,7 +196,7 @@ Result<void> RenderGraph::Execute(RhiDevice& device) {
       break;
     }
     if (chosen == nullptr) {
-      auto created = RhiTexture::Create(device, resource.desc);
+      auto created = RhiTexture::Create(device, ToTextureDesc(resource.desc));
       if (!created) {
         return created.GetError();
       }
