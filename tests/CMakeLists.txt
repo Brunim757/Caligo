@@ -11,6 +11,7 @@ add_executable(caligo_tests
   scene/test_serialization.cpp
   script/test_script_host.cpp
   editor/test_console.cpp
+  editor/test_viewport.cpp
 )
 
 target_link_libraries(caligo_tests PRIVATE
@@ -20,6 +21,7 @@ target_link_libraries(caligo_tests PRIVATE
   caligo_script
   caligo_editor
   doctest::doctest
+  imgui
 )
 
 target_compile_definitions(caligo_tests PRIVATE

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <caligo/core/Log.h>
 #include <cmath>
+#include <format>
 #include <imgui.h>
 #include <string>
 
@@ -100,7 +101,8 @@ bool HasScript(const scene::Entity& entity, const std::string& type) {
 }
 
 void DrawScripts(EditorState& state, const scene::Entity& entity) {
-  ImGui::SeparatorText("Scripts");
+  const std::string header = std::format("Scripts ({})", entity.scripts.size());
+  ImGui::SeparatorText(header.c_str());
 
   std::string removed;
   for (size_t index = 0; index < entity.scripts.size(); ++index) {

@@ -2,6 +2,7 @@
 #include <ImGuizmo.h>
 #include <algorithm>
 #include <array>
+#include <caligo/editor/ViewportCanvas.h>
 #include <cmath>
 #include <format>
 #include <imgui.h>
@@ -446,13 +447,11 @@ void DrawViewport(EditorState& state) {
   ImGui::EndChild();
   ImGui::PopStyleVar();
 
-  const ImVec2 canvasOrigin = ImGui::GetCursorScreenPos();
-  const ImVec2 canvasSize{std::max(ImGui::GetContentRegionAvail().x, 1.0f),
-                          std::max(ImGui::GetContentRegionAvail().y, 1.0f)};
-  ImGui::InvisibleButton("##viewport-canvas", canvasSize,
-                         ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
-                             ImGuiButtonFlags_MouseButtonMiddle);
-  const bool hovered = ImGui::IsItemHovered();
+  const ViewportCanvas canvas =
+      ResolveViewportCanvas(ImGui::GetCursorScreenPos(), ImGui::GetContentRegionAvail());
+  const ImVec2 canvasOrigin = canvas.origin;
+  const ImVec2 canvasSize = canvas.size;
+  const bool hovered = canvas.hovered;
 
   ImDrawList* drawList = ImGui::GetWindowDrawList();
   drawList->PushClipRect(
