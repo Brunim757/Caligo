@@ -166,7 +166,7 @@ TEST_CASE("o renderizador de cena projeta sombra direcional no chão") {
   caligo::render::RenderItem occluder;
   occluder.world = caligo::math::ComposeTransform(caligo::math::Vec3{0.0f, 3.0f, 0.0f},
                                                   caligo::math::IdentityRotation(),
-                                                  caligo::math::Vec3{0.5f, 0.5f, 0.5f});
+                                                  caligo::math::Vec3{1.5f, 1.0f, 1.5f});
   occluder.color = caligo::math::Vec3{1.0f, 0.30f, 0.30f};
   occluded.push_back(occluder);
 
@@ -190,5 +190,5 @@ TEST_CASE("o renderizador de cena projeta sombra direcional no chão") {
       ++darkened;
     }
   }
-  CHECK(darkened > 20);
+  CHECK(darkened > 40);
 }
