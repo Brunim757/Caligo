@@ -83,7 +83,14 @@ TEST_CASE("um clipe devolve silencio fora dos limites") {
 TEST_CASE("um clipe carrega amostras de um arquivo wav") {
   const std::vector<int16_t> samples{0, 16384, -16384, 32767};
   const std::string path = WriteMonoWav(samples, 22050);
+  const uintmax_t expectedBytes = 44 + samples.size() * sizeof(int16_t);
+  const uintmax_t actualBytes = std::filesystem::file_size(path);
+  MESSAGE("wav fixture size ", actualBytes);
+  CHECK(actualBytes == expectedBytes);
   const auto clip = caligo::audio::AudioClip::CreateFromFile(path);
+  if (!clip.HasValue()) {
+    MESSAGE("wav decode error ", clip.GetError().message);
+  }
   REQUIRE(clip.HasValue());
   CHECK(clip.Value()->Channels() == 1);
   CHECK(clip.Value()->SampleRate() == 22050);

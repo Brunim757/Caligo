@@ -51,8 +51,8 @@ Gains ComputeGains(const AudioListener& listener, const math::Vec3& source, floa
   }
   const float pan = math::Clamp(math::Dot(direction, right), -1.0f, 1.0f);
   const float angle = (pan + 1.0f) * 0.25f * math::kPi;
-  gains.left = std::cos(angle);
-  gains.right = std::sin(angle);
+  gains.left = std::cos(angle) * gains.distance;
+  gains.right = std::sin(angle) * gains.distance;
   return gains;
 }
 
