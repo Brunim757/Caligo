@@ -243,8 +243,7 @@ Result<void> CreateTargets(RhiDevice& device, uint32_t width, uint32_t height,
 }
 
 template <typename T>
-Result<std::unique_ptr<T>> CreateShader(RhiDevice& device, const char* source,
-                                        std::unique_ptr<T>& target) {
+Result<void> CreateShader(RhiDevice& device, const char* source, std::unique_ptr<T>& target) {
   const RhiShaderDesc description{source};
   auto shader = RhiShader::Create(device, description);
   if (!shader) {
@@ -255,8 +254,8 @@ Result<std::unique_ptr<T>> CreateShader(RhiDevice& device, const char* source,
 }
 
 template <typename T>
-Result<std::unique_ptr<T>> CreatePipeline(RhiDevice& device, const RhiPipelineDesc& description,
-                                          std::unique_ptr<T>& target) {
+Result<void> CreatePipeline(RhiDevice& device, const RhiPipelineDesc& description,
+                            std::unique_ptr<T>& target) {
   auto pipeline = RhiPipeline::Create(device, description);
   if (!pipeline) {
     return pipeline.GetError();
