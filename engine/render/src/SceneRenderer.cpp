@@ -311,6 +311,8 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   projection._32 -= jitterY;
   const math::Mat4 viewProjection = math::Multiply(camera.view, projection);
   const math::Mat4 inverseViewProjection = math::Inverse(viewProjection);
+  const math::Mat4 stableViewProjection = math::Multiply(camera.view, camera.projection);
+  const math::Mat4 stableInverseViewProjection = math::Inverse(stableViewProjection);
 
   RenderGraph& graph = m_impl->graph;
   graph.Reset();
@@ -380,11 +382,11 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   graph.Write(gridPass, hdr);
 
   const RenderGraph::PassId taaPass =
-      graph.AddPass([this, &device, hdr, depth, inverseViewProjection, viewProjection, width,
-                     height](RenderGraphContext& context) {
+      graph.AddPass([this, &device, hdr, depth, stableInverseViewProjection, stableViewProjection,
+                     width, height](RenderGraphContext& context) {
         return m_impl->taa.Apply(device, context.Texture(hdr).ShaderResourceView(),
-                                 context.Texture(depth).ShaderResourceView(), inverseViewProjection,
-                                 viewProjection, width, height);
+                                 context.Texture(depth).ShaderResourceView(),
+                                 stableInverseViewProjection, stableViewProjection, width, height);
       });
   graph.Read(taaPass, hdr);
   graph.Read(taaPass, depth);

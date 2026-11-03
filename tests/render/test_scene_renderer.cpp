@@ -307,7 +307,7 @@ TEST_CASE("o TAA mantém a imagem estável por 300 quadros") {
       for (size_t index = 0; index < previous.size(); ++index) {
         const int difference =
             std::abs(static_cast<int>(pixels.Value()[index]) - static_cast<int>(previous[index]));
-        if (difference >= 64) {
+        if (difference >= 16) {
           ++changed;
         }
         totalDifference += difference;
@@ -317,8 +317,8 @@ TEST_CASE("o TAA mantém a imagem estável por 300 quadros") {
     previous = pixels.Value();
   }
   REQUIRE(samples > 0);
-  CHECK(static_cast<double>(totalDifference) / static_cast<double>(samples) < 4.0);
-  CHECK(static_cast<double>(changed) / static_cast<double>(samples) < 0.01);
+  CHECK(static_cast<double>(totalDifference) / static_cast<double>(samples) < 2.0);
+  CHECK(static_cast<double>(changed) / static_cast<double>(samples) < 0.002);
 }
 
 TEST_CASE("o TAA é determinístico com a câmera em movimento") {
