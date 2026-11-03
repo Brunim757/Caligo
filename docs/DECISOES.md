@@ -1,6 +1,6 @@
 # Caligo — Registro de Decisões
 
-Versão 0.8
+Versão 0.9
 
 ## Como funciona
 
@@ -37,9 +37,11 @@ Toda decisão tem ID, status e consequência. `FIXO` só muda por RFC em `docs/r
 | D-027 | FIXO | Hospedagem de script framework-dependent com runtime .NET privado no artefato, contexto coletável e shadow copy. | O editor não pode depender do runtime da máquina nem bloquear os assemblies durante a recarga. | O artefato leva `runtime/dotnet`, `runtime/host` e `runtime/gameplay`; cada execução recria o contexto gerenciado. |
 | D-028 | FIXO | Projeto é um descritor de conteúdo, não um diretório implícito: nome, raiz de conteúdo, cena inicial e assembly de gameplay próprios. | Dois jogos do estúdio não cabem na mesma árvore de conteúdo com um único assembly fixo ao lado do executável. | O editor cria, abre e alterna projetos; o runtime resolve conteúdo e gameplay pelo descritor. Primeira entrega de ferramentas depois da R1; a R1 mantém um projeto implícito. |
 | D-029 | FIXO | O corpo ativo é tecnologia própria, com nome Tônus: motores que perseguem alvos de animação, equilíbrio, reflexo, cambaleio e levantar, compostos por comportamentos afináveis por dados. | O corpo que reage como gente é o que separa um mundo vivo de um mundo de bonecos, e isso exige nome, contrato e autoria como conteúdo. | Nada de middleware licenciado e nada copiado; é módulo próprio acima de animação e física, porque a pose tem um dono só; nível de comportamento por distância. Primeiro estágio junto do personagem da R4; o documento de sistema nasce na release que o implementar. |
+| D-030 | FIXO | Câmera é componente de cena, com lente e seleção da câmera ativa; o comportamento de câmera é script C#. | A lente é dado de cena, versionável e editável no inspetor; o comportamento é gameplay e itera em C#. | A R4 entrega o componente e o play passa a renderizar pela câmera ativa; o viewport mantém a câmera livre do editor. |
 
 ## Histórico
 
+- **0.9** — registra a D-030: câmera como componente de cena, comportamento em script C#.
 - **0.8** — confirma o limite de arquivo da D-022 como fixo, depois da R2.
 - **0.7** — corrige a fronteira do Tônus: módulo próprio acima de animação e física, porque a pose tem um dono só.
 - **0.6** — registra a D-029: corpo ativo como tecnologia própria, com nome Tônus.

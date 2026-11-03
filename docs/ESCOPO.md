@@ -2,7 +2,7 @@
 
 > Engine de mundo aberto estilizado. Windows. Cidade densa e natureza estilizada. Nada além.
 
-Versão 1.1
+Versão 1.2
 
 ## 1. Identidade
 
@@ -55,6 +55,7 @@ Estas decisões não mudam sem RFC. A regra está na seção 11.
 | D-027 | Hospedagem de script framework-dependent com runtime .NET privado, contexto coletável e shadow copy | FIXO |
 | D-028 | Projeto como descritor de conteúdo, com raiz, cena inicial e assembly de gameplay próprios | FIXO |
 | D-029 | Corpo ativo como tecnologia própria, com nome Tônus, em módulo próprio e afinado por dados | FIXO |
+| D-030 | Câmera como componente de cena, com lente e seleção da câmera ativa; comportamento em script C# | FIXO |
 
 ## 3. Não-objetivos
 
@@ -251,6 +252,7 @@ O objetivo não é congelar a engine. É impedir que uma decisão fechada seja r
 
 ## 12. Histórico
 
+- **1.2** — registra a D-030: câmera como componente de cena, comportamento em script C#.
 - **1.1** — confirma o limite de arquivo da D-022 como fixo, depois da R2.
 - **0.1** — fundação do escopo.
 - **0.2** — UI de jogo como sistema próprio e release R6; limite de arquivo; referência à arquitetura.
