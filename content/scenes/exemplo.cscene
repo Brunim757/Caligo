@@ -1,7 +1,10 @@
 {
   "format": "caligo.scene",
-  "version": 2,
+  "version": 3,
   "guid": "8f14e45fceea167a5a36dedd4bea2543",
+  "environment": {
+    "hours": 9.0
+  },
   "entities": [
     {
       "id": 1,

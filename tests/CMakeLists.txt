@@ -17,6 +17,7 @@ add_executable(caligo_tests
   render/test_offscreen.cpp
   render/test_render_graph.cpp
   render/test_scene_renderer.cpp
+  render/test_sky.cpp
   editor/test_console.cpp
   editor/test_viewport.cpp
 )

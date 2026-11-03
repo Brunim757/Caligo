@@ -24,6 +24,15 @@ bool SameTransform(const Transform& left, const Transform& right) noexcept {
          SameVec3(left.scale, right.scale);
 }
 
+bool SameEnvironment(const WorldEnvironment& left, const WorldEnvironment& right) noexcept {
+  return left.skyHours == right.skyHours;
+}
+
+bool IsValidEnvironment(const WorldEnvironment& environment) noexcept {
+  return std::isfinite(environment.skyHours) && environment.skyHours >= 0.0f &&
+         environment.skyHours <= 24.0f;
+}
+
 const Entity* FindEntity(const std::vector<Entity>& entities, EntityId id) noexcept {
   const auto found = std::find_if(entities.begin(), entities.end(),
                                   [id](const Entity& entity) { return entity.id == id; });
@@ -142,6 +151,22 @@ bool Scene::SetGuid(std::string_view guid) {
     return false;
   }
   m_guid.assign(guid);
+  ++m_revision;
+  return true;
+}
+
+const WorldEnvironment& Scene::Environment() const noexcept {
+  return m_environment;
+}
+
+bool Scene::SetEnvironment(const WorldEnvironment& environment) {
+  if (!IsValidEnvironment(environment)) {
+    return false;
+  }
+  if (SameEnvironment(m_environment, environment)) {
+    return true;
+  }
+  m_environment = environment;
   ++m_revision;
   return true;
 }
@@ -358,6 +383,9 @@ math::Mat4 Scene::WorldMatrix(EntityId id) const noexcept {
 Result<void> Scene::Validate() const {
   if (!IsValidGuid(m_guid)) {
     return Error{"scene GUID is invalid", 1};
+  }
+  if (!IsValidEnvironment(m_environment)) {
+    return Error{"scene environment sky hours must be between 0 and 24", 12};
   }
 
   std::unordered_set<EntityId> ids;

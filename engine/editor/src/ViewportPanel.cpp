@@ -1,10 +1,12 @@
 #include "EditorPanels.h"
+#include "SkyTool.h"
 #include <ImGuizmo.h>
 #include <algorithm>
 #include <array>
 #include <caligo/core/Log.h>
 #include <caligo/editor/ViewportCanvas.h>
 #include <caligo/render/RhiDevice.h>
+#include <caligo/render/Sky.h>
 #include <cmath>
 #include <format>
 #include <imgui.h>
@@ -239,6 +241,8 @@ void DrawToolbar(EditorState& state) {
   } else {
     ImGui::TextDisabled("Ctrl: encaixe");
   }
+  ImGui::SameLine();
+  DrawSkyToolbar(state);
 }
 
 void ManipulateSelection(EditorState& state, const math::Mat4& view, const math::Mat4& projection) {
@@ -471,8 +475,9 @@ bool DrawScene(EditorState& state, const math::Mat4& view, const math::Mat4& pro
   camera.projection = projection;
 
   const std::vector<render::RenderItem> items = BuildRenderItems(state);
+  const render::SkyState sky = render::EvaluateSky(state.scene.Environment().skyHours);
   const Result<void> rendered =
-      state.sceneRenderer.Render(*device, items, camera, render::RenderLight{}, width, height);
+      state.sceneRenderer.Render(*device, items, camera, sky.light, width, height, sky.environment);
   if (!rendered) {
     if (!state.viewportErrorLogged) {
       CALIGO_LOG_ERROR("não foi possível desenhar a cena: {}", rendered.GetError().message);

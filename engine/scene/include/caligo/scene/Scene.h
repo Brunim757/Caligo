@@ -27,6 +27,10 @@ struct ScriptComponent {
   std::string type;
 };
 
+struct WorldEnvironment {
+  float skyHours = 12.0f;
+};
+
 struct Entity {
   EntityId id = kNoEntity;
   EntityId parent = kNoEntity;
@@ -48,6 +52,9 @@ public:
 
   [[nodiscard]] const std::string& Guid() const noexcept;
   [[nodiscard]] bool SetGuid(std::string_view guid);
+
+  [[nodiscard]] const WorldEnvironment& Environment() const noexcept;
+  [[nodiscard]] bool SetEnvironment(const WorldEnvironment& environment);
 
   [[nodiscard]] EntityId CreateEntity(std::string_view name, EntityId parent = kNoEntity);
   [[nodiscard]] bool InsertEntity(EntityId id, std::string name, EntityId parent,
@@ -72,6 +79,7 @@ public:
 private:
   std::vector<Entity> m_entities;
   std::string m_guid;
+  WorldEnvironment m_environment;
   EntityId m_nextId = 1;
   uint64_t m_revision = 0;
 };

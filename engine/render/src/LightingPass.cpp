@@ -7,6 +7,7 @@
 #include <caligo/render/RhiDevice.h>
 #include <caligo/render/RhiSampler.h>
 #include <caligo/render/RhiTexture.h>
+#include <cmath>
 #include <d3d11.h>
 #include <iterator>
 #include <utility>
@@ -21,7 +22,13 @@ cbuffer LightingConstants : register(b0) {
   row_major float4x4 lightViewProjection;
   float4 lightDirection;
   float4 lightColor;
-  float4 background;
+  float4 sunColor;
+  float4 cameraPosition;
+  float4 skyZenith;
+  float4 skyHorizon;
+  float4 skyGround;
+  float4 ambientSky;
+  float4 ambientGround;
   float4 shadowParams;
 };
 
@@ -49,23 +56,39 @@ LightingOutput VsMain(LightingInput input) {
   return output;
 }
 
+float3 WorldPosition(float2 uv, float depth) {
+  float4 clip = float4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
+  float4 world = mul(clip, inverseViewProjection);
+  return world.xyz / world.w;
+}
+
+float3 SkyColor(float3 direction) {
+  float elevation = direction.y;
+  float3 sky = lerp(skyHorizon.rgb, skyZenith.rgb, pow(saturate(elevation), 0.45));
+  sky = lerp(sky, skyGround.rgb, smoothstep(0.0, 0.08, saturate(-elevation)));
+  float3 sunDirection = normalize(lightDirection.xyz);
+  float alignment = dot(direction, sunDirection);
+  float edge = max(fwidth(alignment), 1.0e-5);
+  float disk = smoothstep(lightDirection.w - edge, lightDirection.w + edge, alignment);
+  float halo = pow(saturate(alignment), 48.0) * 0.06;
+  return sky + sunColor.rgb * (disk + halo) * sunColor.a;
+}
+
 float4 PsMain(LightingOutput input) : SV_TARGET {
   float4 albedo = albedoTex.Sample(linearSampler, input.uv);
-  if (albedo.a < 0.5) {
-    return float4(background.rgb, 1.0);
-  }
-
   uint2 pixel = uint2(input.position.xy);
   float depth = depthTex.Load(int3(pixel, 0));
-  float4 clip = float4(input.uv.x * 2.0 - 1.0, 1.0 - input.uv.y * 2.0, depth, 1.0);
-  float4 worldPosition = mul(clip, inverseViewProjection);
-  worldPosition /= worldPosition.w;
+  float3 worldPosition = WorldPosition(input.uv, depth);
+  if (albedo.a < 0.5) {
+    float3 direction = normalize(worldPosition - cameraPosition.xyz);
+    return float4(SkyColor(direction), 1.0);
+  }
 
   float3 normal = normalize(normalTex.Sample(linearSampler, input.uv).xyz);
   float diffuse = saturate(dot(normal, normalize(lightDirection.xyz)));
 
   float shadow = 1.0;
-  float4 shadowPosition = mul(worldPosition, lightViewProjection);
+  float4 shadowPosition = mul(float4(worldPosition, 1.0), lightViewProjection);
   float3 projected = shadowPosition.xyz / shadowPosition.w;
   float2 shadowUv = float2(projected.x * 0.5 + 0.5, 0.5 - projected.y * 0.5);
   if (projected.z >= 0.0 && projected.z <= 1.0 && shadowUv.x >= 0.0 && shadowUv.x <= 1.0 &&
@@ -84,7 +107,8 @@ float4 PsMain(LightingOutput input) : SV_TARGET {
     shadow = total / 9.0;
   }
 
-  float3 ambient = albedo.rgb * 0.22;
+  float3 ambientColor = lerp(ambientGround.rgb, ambientSky.rgb, saturate(normal.y * 0.5 + 0.5));
+  float3 ambient = albedo.rgb * ambientColor;
   float3 direct = albedo.rgb * lightColor.rgb * diffuse * shadow;
   return float4(ambient + direct, 1.0);
 }
@@ -95,7 +119,13 @@ struct LightingConstants {
   math::Mat4 lightViewProjection{};
   float lightDirection[4]{0.0f, 0.0f, 0.0f, 0.0f};
   float lightColor[4]{1.0f, 1.0f, 1.0f, 1.0f};
-  float background[4]{0.0f, 0.0f, 0.0f, 1.0f};
+  float sunColor[4]{1.0f, 1.0f, 1.0f, 0.0f};
+  float cameraPosition[4]{0.0f, 0.0f, 0.0f, 0.0f};
+  float skyZenith[4]{0.0f, 0.0f, 0.0f, 0.0f};
+  float skyHorizon[4]{0.0f, 0.0f, 0.0f, 0.0f};
+  float skyGround[4]{0.0f, 0.0f, 0.0f, 0.0f};
+  float ambientSky[4]{0.0f, 0.0f, 0.0f, 0.0f};
+  float ambientGround[4]{0.0f, 0.0f, 0.0f, 0.0f};
   float shadowParams[4]{0.0f, 0.0f, 0.0f, 0.0f};
 };
 
@@ -225,12 +255,32 @@ Result<void> LightingPass::Render(RhiDevice& device, const LightingInputs& input
   constants.lightDirection[0] = settings.lightDirection.x;
   constants.lightDirection[1] = settings.lightDirection.y;
   constants.lightDirection[2] = settings.lightDirection.z;
+  constants.lightDirection[3] = std::cos(math::Radians(settings.sunAngularRadiusDegrees));
   constants.lightColor[0] = settings.lightColor.x;
   constants.lightColor[1] = settings.lightColor.y;
   constants.lightColor[2] = settings.lightColor.z;
-  constants.background[0] = settings.background.x;
-  constants.background[1] = settings.background.y;
-  constants.background[2] = settings.background.z;
+  constants.sunColor[0] = settings.sunColor.x;
+  constants.sunColor[1] = settings.sunColor.y;
+  constants.sunColor[2] = settings.sunColor.z;
+  constants.sunColor[3] = settings.sunIntensity;
+  constants.cameraPosition[0] = settings.cameraPosition.x;
+  constants.cameraPosition[1] = settings.cameraPosition.y;
+  constants.cameraPosition[2] = settings.cameraPosition.z;
+  constants.skyZenith[0] = settings.skyZenith.x;
+  constants.skyZenith[1] = settings.skyZenith.y;
+  constants.skyZenith[2] = settings.skyZenith.z;
+  constants.skyHorizon[0] = settings.skyHorizon.x;
+  constants.skyHorizon[1] = settings.skyHorizon.y;
+  constants.skyHorizon[2] = settings.skyHorizon.z;
+  constants.skyGround[0] = settings.skyGround.x;
+  constants.skyGround[1] = settings.skyGround.y;
+  constants.skyGround[2] = settings.skyGround.z;
+  constants.ambientSky[0] = settings.ambientSky.x;
+  constants.ambientSky[1] = settings.ambientSky.y;
+  constants.ambientSky[2] = settings.ambientSky.z;
+  constants.ambientGround[0] = settings.ambientGround.x;
+  constants.ambientGround[1] = settings.ambientGround.y;
+  constants.ambientGround[2] = settings.ambientGround.z;
   constants.shadowParams[0] = settings.shadowTexel;
   constants.shadowParams[1] = settings.shadowBias;
   const Result<void> updated =

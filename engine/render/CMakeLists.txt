@@ -14,6 +14,7 @@ add_library(caligo_render STATIC
   src/RenderGraph.cpp
   src/SceneRenderer.cpp
   src/ShadowMap.cpp
+  src/Sky.cpp
   src/TaaRenderer.cpp
 )
 

@@ -19,6 +19,9 @@ caligo::scene::Scene BuildScene() {
   REQUIRE(scene.SetTransform(child, transform));
   REQUIRE(scene.AddScript(child, "Spinner"));
   REQUIRE(scene.AddScript(child, "PlayerMover"));
+  caligo::scene::WorldEnvironment environment;
+  environment.skyHours = 7.25f;
+  REQUIRE(scene.SetEnvironment(environment));
   return scene;
 }
 
@@ -29,7 +32,8 @@ TEST_CASE("scene serialization round trips") {
   const caligo::Result<std::string> saved = caligo::scene::SaveSceneToString(original);
   REQUIRE(saved);
   CHECK(saved.Value().find("\"format\": \"caligo.scene\"") != std::string::npos);
-  CHECK(saved.Value().find("\"version\": 2") != std::string::npos);
+  CHECK(saved.Value().find("\"version\": 3") != std::string::npos);
+  CHECK(saved.Value().find("\"environment\"") != std::string::npos);
   CHECK(saved.Value().find("Café") != std::string::npos);
   CHECK(saved.Value().find("caligo.script") != std::string::npos);
 
@@ -38,6 +42,7 @@ TEST_CASE("scene serialization round trips") {
   REQUIRE(loaded);
   const caligo::scene::Scene& scene = loaded.Value();
   CHECK(scene.Guid() == original.Guid());
+  CHECK(scene.Environment().skyHours == doctest::Approx(7.25f));
   REQUIRE(scene.Entities().size() == 2);
   CHECK(scene.Validate());
 
@@ -67,6 +72,7 @@ TEST_CASE("scene serialization accepts version one scenes") {
   REQUIRE(loaded);
   REQUIRE(loaded.Value().Entities().size() == 1);
   CHECK(loaded.Value().Entities().front().scripts.empty());
+  CHECK(loaded.Value().Environment().skyHours == doctest::Approx(12.0f));
   CHECK(loaded.Value().Validate());
 }
 
@@ -75,7 +81,11 @@ TEST_CASE("scene serialization rejects malformed input") {
   CHECK_FALSE(caligo::scene::LoadSceneFromString("[]"));
   CHECK_FALSE(caligo::scene::LoadSceneFromString(R"({"format":"other","version":1})"));
   CHECK_FALSE(caligo::scene::LoadSceneFromString(
+      R"({"format":"caligo.scene","version":4,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[]})"));
+  CHECK_FALSE(caligo::scene::LoadSceneFromString(
       R"({"format":"caligo.scene","version":3,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[]})"));
+  CHECK_FALSE(caligo::scene::LoadSceneFromString(
+      R"({"format":"caligo.scene","version":3,"guid":"8f14e45fceea167a5a36dedd4bea2543","environment":{"hours":25.0},"entities":[]})"));
   CHECK_FALSE(caligo::scene::LoadSceneFromString(
       R"({"format":"caligo.scene","version":1,"guid":"8f14e45fceea167a5a36dedd4bea2543","entities":[{"id":1,"name":"Sem transform","parent":0,"components":[]}]})"));
   CHECK_FALSE(caligo::scene::LoadSceneFromString(

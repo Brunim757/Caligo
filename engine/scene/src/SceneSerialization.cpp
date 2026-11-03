@@ -103,6 +103,20 @@ Result<std::pair<EntityId, EntityId>> ReadIdentity(const Json& entity) {
   return std::pair<EntityId, EntityId>{id, parentValue->get<uint64_t>()};
 }
 
+Result<WorldEnvironment> ReadEnvironment(const Json& root) {
+  const Json* environment = Member(root, "environment");
+  if (environment == nullptr || !environment->is_object()) {
+    return Error{"scene environment must be an object", 50};
+  }
+  const Json* hours = Member(*environment, "hours");
+  WorldEnvironment parsed;
+  if (hours == nullptr || !ReadFloat(*hours, parsed.skyHours) || parsed.skyHours < 0.0f ||
+      parsed.skyHours > 24.0f) {
+    return Error{"scene environment hours must be between 0 and 24", 51};
+  }
+  return parsed;
+}
+
 Result<std::string> ReadName(const Json& entity, EntityId id) {
   const Json* name = Member(entity, "name");
   if (name == nullptr || !name->is_string()) {
@@ -213,8 +227,10 @@ Result<std::string> SaveSceneToString(const Scene& scene) {
 
   Json root = Json::object();
   root["format"] = "caligo.scene";
-  root["version"] = 2;
+  root["version"] = 3;
   root["guid"] = scene.Guid();
+  root["environment"] = Json::object();
+  root["environment"]["hours"] = scene.Environment().skyHours;
   root["entities"] = Json::array();
 
   std::vector<const Entity*> sorted;
@@ -274,7 +290,7 @@ Result<Scene> LoadSceneFromString(std::string_view text) {
     return Error{"scene version must be an integer", 43};
   }
   const double versionNumber = version->get<double>();
-  if (versionNumber != 1.0 && versionNumber != 2.0) {
+  if (versionNumber != 1.0 && versionNumber != 2.0 && versionNumber != 3.0) {
     return Error{"scene version is not supported", 44};
   }
 
@@ -291,6 +307,15 @@ Result<Scene> LoadSceneFromString(std::string_view text) {
   Scene scene;
   if (!scene.SetGuid(guid->get<std::string>())) {
     return Error{"scene GUID is invalid", 47};
+  }
+  if (versionNumber >= 3.0) {
+    const Result<WorldEnvironment> environment = ReadEnvironment(root);
+    if (!environment) {
+      return environment.GetError();
+    }
+    if (!scene.SetEnvironment(environment.Value())) {
+      return Error{"scene environment could not be applied", 52};
+    }
   }
 
   for (const Json& value : *entities) {

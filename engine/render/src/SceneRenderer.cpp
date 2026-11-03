@@ -33,7 +33,6 @@ struct MeshVertex {
 constexpr float kHalf = 0.5f;
 constexpr int kGridHalfLines = 10;
 constexpr float kShadowBias = 0.0025f;
-constexpr math::Vec3 kBackground{0.020f, 0.025f, 0.035f};
 
 constexpr MeshVertex kCubeVertices[] = {
     {{-kHalf, -kHalf, kHalf}, {0.0f, 0.0f, 1.0f}},
@@ -280,7 +279,8 @@ SceneRenderer::~SceneRenderer() = default;
 
 Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem> items,
                                    const RenderCamera& camera, const RenderLight& light,
-                                   uint32_t width, uint32_t height) {
+                                   uint32_t width, uint32_t height,
+                                   const RenderEnvironment& environment) {
   if (width == 0 || height == 0) {
     return Error{"scene renderer needs a positive size", 1};
   }
@@ -313,6 +313,8 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   const math::Mat4 inverseViewProjection = math::Inverse(viewProjection);
   const math::Mat4 stableViewProjection = math::Multiply(camera.view, camera.projection);
   const math::Mat4 stableInverseViewProjection = math::Inverse(stableViewProjection);
+  const math::Vec3 cameraPosition =
+      math::TransformPoint(math::Inverse(camera.view), math::Vec3{0.0f, 0.0f, 0.0f});
 
   RenderGraph& graph = m_impl->graph;
   graph.Reset();
@@ -348,8 +350,8 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   graph.Write(gbufferPass, depth);
 
   const RenderGraph::PassId lightingPass =
-      graph.AddPass([this, &device, light, albedo, normal, depth, hdr, inverseViewProjection, width,
-                     height](RenderGraphContext& context) {
+      graph.AddPass([this, &device, light, environment, cameraPosition, albedo, normal, depth, hdr,
+                     inverseViewProjection, width, height](RenderGraphContext& context) {
         LightingInputs inputs;
         inputs.albedo = context.Texture(albedo).ShaderResourceView();
         inputs.normal = context.Texture(normal).ShaderResourceView();
@@ -362,7 +364,15 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
         settings.lightViewProjection = m_impl->shadowMap.LightViewProjection();
         settings.lightDirection = SafeLightDirection(light.direction);
         settings.lightColor = light.color;
-        settings.background = kBackground;
+        settings.sunColor = environment.sunColor;
+        settings.cameraPosition = cameraPosition;
+        settings.skyZenith = environment.skyZenith;
+        settings.skyHorizon = environment.skyHorizon;
+        settings.skyGround = environment.skyGround;
+        settings.ambientSky = environment.ambientSky;
+        settings.ambientGround = environment.ambientGround;
+        settings.sunIntensity = environment.sunIntensity;
+        settings.sunAngularRadiusDegrees = environment.sunAngularRadiusDegrees;
         settings.shadowTexel = m_impl->shadowMap.TexelSize();
         settings.shadowBias = kShadowBias;
 

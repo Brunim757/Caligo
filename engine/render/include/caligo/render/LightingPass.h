@@ -22,7 +22,15 @@ struct LightingSettings {
   math::Mat4 lightViewProjection{};
   math::Vec3 lightDirection{0.4f, 1.0f, -0.35f};
   math::Vec3 lightColor{1.0f, 0.98f, 0.94f};
-  math::Vec3 background{0.020f, 0.025f, 0.035f};
+  math::Vec3 sunColor{1.0f, 0.97f, 0.90f};
+  math::Vec3 cameraPosition{};
+  math::Vec3 skyZenith{0.070f, 0.130f, 0.280f};
+  math::Vec3 skyHorizon{0.460f, 0.560f, 0.700f};
+  math::Vec3 skyGround{0.045f, 0.045f, 0.055f};
+  math::Vec3 ambientSky{0.210f, 0.240f, 0.300f};
+  math::Vec3 ambientGround{0.055f, 0.055f, 0.065f};
+  float sunIntensity = 0.0f;
+  float sunAngularRadiusDegrees = 0.0f;
   float shadowTexel = 0.0f;
   float shadowBias = 0.0f;
 };

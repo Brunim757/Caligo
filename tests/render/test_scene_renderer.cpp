@@ -15,6 +15,8 @@ namespace {
 constexpr uint32_t kSize = 64;
 constexpr uint32_t kSmallSize = 32;
 constexpr int kTolerance = 4;
+constexpr caligo::math::Vec3 kFlatSky{0.020f, 0.025f, 0.035f};
+constexpr caligo::math::Vec3 kFlatAmbient{0.22f, 0.22f, 0.22f};
 
 struct Rgb {
   int red = 0;
@@ -44,6 +46,20 @@ Rgb LitColor(const caligo::math::Vec3& base, const caligo::math::Vec3& light) {
 
 Rgb BackgroundColor() {
   return Rgb{ToByte(Encode(0.020f)), ToByte(Encode(0.025f)), ToByte(Encode(0.035f))};
+}
+
+caligo::render::RenderEnvironment FlatEnvironment(const caligo::math::Vec3& sky,
+                                                  const caligo::math::Vec3& ambient) {
+  caligo::render::RenderEnvironment environment;
+  environment.skyZenith = sky;
+  environment.skyHorizon = sky;
+  environment.skyGround = sky;
+  environment.ambientSky = ambient;
+  environment.ambientGround = ambient;
+  environment.sunColor = caligo::math::Vec3{0.0f, 0.0f, 0.0f};
+  environment.sunIntensity = 0.0f;
+  environment.sunAngularRadiusDegrees = 0.0f;
+  return environment;
 }
 
 Rgb Sample(const std::vector<uint8_t>& pixels, uint32_t size, uint32_t x, uint32_t y) {
@@ -120,9 +136,10 @@ TEST_CASE("o renderizador de cena desenha cubos sólidos e iluminados") {
   light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
   light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
 
+  const caligo::render::RenderEnvironment environment = FlatEnvironment(kFlatSky, kFlatAmbient);
   caligo::render::SceneRenderer renderer;
   const caligo::Result<void> rendered =
-      renderer.Render(*device.Value(), items, camera, light, kSize, kSize);
+      renderer.Render(*device.Value(), items, camera, light, kSize, kSize, environment);
   REQUIRE(rendered.HasValue());
   CHECK(renderer.Width() == kSize);
   CHECK(renderer.Height() == kSize);
@@ -138,6 +155,79 @@ TEST_CASE("o renderizador de cena desenha cubos sólidos e iluminados") {
   CheckColor(Sample(frame.Value(), kSize, 35, 35), lit);
   CheckColor(Sample(frame.Value(), kSize, 3, 3), background);
   CheckColor(Sample(frame.Value(), kSize, 60, 3), background);
+}
+
+TEST_CASE("o céu faz gradiente entre o zênite e o chão") {
+  auto device = caligo::render::RhiDevice::Create(true);
+  REQUIRE(device.HasValue());
+
+  caligo::render::RenderCamera camera;
+  camera.view = caligo::math::LookAt(caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                     caligo::math::Vec3{0.0f, 0.0f, 1.0f},
+                                     caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+  camera.projection = caligo::math::Perspective(55.0f, 1.0f, 0.1f, 100.0f);
+
+  caligo::render::RenderLight light;
+  light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
+
+  caligo::render::RenderEnvironment environment;
+  environment.skyZenith = caligo::math::Vec3{0.02f, 0.06f, 0.24f};
+  environment.skyHorizon = caligo::math::Vec3{0.50f, 0.50f, 0.55f};
+  environment.skyGround = caligo::math::Vec3{0.01f, 0.01f, 0.01f};
+  environment.ambientSky = caligo::math::Vec3{0.20f, 0.20f, 0.20f};
+  environment.ambientGround = caligo::math::Vec3{0.05f, 0.05f, 0.05f};
+  environment.sunColor = caligo::math::Vec3{0.0f, 0.0f, 0.0f};
+  environment.sunIntensity = 0.0f;
+  environment.sunAngularRadiusDegrees = 0.0f;
+
+  caligo::render::SceneRenderer renderer;
+  REQUIRE(renderer
+              .Render(*device.Value(), std::span<const caligo::render::RenderItem>{}, camera, light,
+                      kSize, kSize, environment)
+              .HasValue());
+  const caligo::Result<std::vector<uint8_t>> frame = renderer.ReadColor();
+  REQUIRE(frame.HasValue());
+
+  const Rgb top = Sample(frame.Value(), kSize, 32, 3);
+  const Rgb bottom = Sample(frame.Value(), kSize, 32, 60);
+  CHECK(top.blue > bottom.blue + 20);
+  CHECK(top.red + top.green + top.blue > bottom.red + bottom.green + bottom.blue);
+}
+
+TEST_CASE("o sol desenha o disco e brilha acima do céu") {
+  auto device = caligo::render::RhiDevice::Create(true);
+  REQUIRE(device.HasValue());
+
+  caligo::render::RenderCamera camera;
+  camera.view = caligo::math::LookAt(caligo::math::Vec3{0.0f, 0.0f, 0.0f},
+                                     caligo::math::Vec3{0.0f, 0.5f, 1.0f},
+                                     caligo::math::Vec3{0.0f, 1.0f, 0.0f});
+  camera.projection = caligo::math::Perspective(55.0f, 1.0f, 0.1f, 100.0f);
+
+  caligo::render::RenderLight light;
+  light.direction = caligo::math::Vec3{0.0f, 0.5f, 1.0f};
+
+  caligo::render::RenderEnvironment environment;
+  environment.skyZenith = caligo::math::Vec3{0.05f, 0.07f, 0.12f};
+  environment.skyHorizon = caligo::math::Vec3{0.10f, 0.12f, 0.16f};
+  environment.skyGround = caligo::math::Vec3{0.02f, 0.02f, 0.02f};
+  environment.ambientSky = caligo::math::Vec3{0.20f, 0.20f, 0.20f};
+  environment.ambientGround = caligo::math::Vec3{0.05f, 0.05f, 0.05f};
+  environment.sunColor = caligo::math::Vec3{1.0f, 0.95f, 0.85f};
+  environment.sunIntensity = 20.0f;
+  environment.sunAngularRadiusDegrees = 4.0f;
+
+  caligo::render::SceneRenderer renderer;
+  REQUIRE(renderer
+              .Render(*device.Value(), std::span<const caligo::render::RenderItem>{}, camera, light,
+                      kSize, kSize, environment)
+              .HasValue());
+  const caligo::Result<std::vector<uint8_t>> frame = renderer.ReadColor();
+  REQUIRE(frame.HasValue());
+
+  const Rgb center = Sample(frame.Value(), kSize, 32, 32);
+  const Rgb sky = Sample(frame.Value(), kSize, 32, 4);
+  CHECK(center.red > sky.red + 80);
 }
 
 TEST_CASE("o renderizador de cena respeita a profundidade e é determinístico") {
@@ -158,8 +248,10 @@ TEST_CASE("o renderizador de cena respeita a profundidade e é determinístico")
   light.direction = caligo::math::Vec3{0.0f, 0.0f, 1.0f};
   light.color = caligo::math::Vec3{1.0f, 0.98f, 0.94f};
 
+  const caligo::render::RenderEnvironment environment = FlatEnvironment(kFlatSky, kFlatAmbient);
   caligo::render::SceneRenderer firstRenderer;
-  REQUIRE(firstRenderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
+  REQUIRE(firstRenderer.Render(*device.Value(), items, camera, light, kSize, kSize, environment)
+              .HasValue());
   const caligo::Result<std::vector<uint8_t>> first = firstRenderer.ReadColor();
   REQUIRE(first.HasValue());
 
@@ -167,13 +259,15 @@ TEST_CASE("o renderizador de cena respeita a profundidade e é determinístico")
   CheckColor(occluded, LitColor(frontColor, light.color));
 
   caligo::render::SceneRenderer secondRenderer;
-  REQUIRE(secondRenderer.Render(*device.Value(), items, camera, light, kSize, kSize).HasValue());
+  REQUIRE(secondRenderer.Render(*device.Value(), items, camera, light, kSize, kSize, environment)
+              .HasValue());
   const caligo::Result<std::vector<uint8_t>> second = secondRenderer.ReadColor();
   REQUIRE(second.HasValue());
   REQUIRE(first.Value().size() == second.Value().size());
   CHECK(first.Value() == second.Value());
 
-  REQUIRE(firstRenderer.Render(*device.Value(), items, camera, light, kSmallSize, kSmallSize)
+  REQUIRE(firstRenderer
+              .Render(*device.Value(), items, camera, light, kSmallSize, kSmallSize, environment)
               .HasValue());
   CHECK(firstRenderer.Width() == kSmallSize);
   CHECK(firstRenderer.Height() == kSmallSize);
@@ -270,7 +364,7 @@ TEST_CASE("o pos-processamento espalha o brilho de objetos intensos") {
   const int backgroundLuminance =
       backgroundPixel.red + backgroundPixel.green + backgroundPixel.blue;
   const int bloomLuminance = bloomPixel.red + bloomPixel.green + bloomPixel.blue;
-  CHECK(backgroundLuminance < 300);
+  CHECK(backgroundLuminance < 720);
   CHECK(bloomLuminance > backgroundLuminance + 30);
 }
 
