@@ -1,4 +1,5 @@
 #include "EditorPanels.h"
+#include "TerrainTool.h"
 #include <algorithm>
 #include <caligo/core/Log.h>
 #include <cmath>
@@ -228,6 +229,7 @@ void DrawInspector(EditorState& state) {
   entity = state.scene.Find(state.selected);
   if (entity != nullptr) {
     DrawScripts(state, *entity);
+    DrawTerrainInspector(state);
   }
 
   ImGui::Separator();

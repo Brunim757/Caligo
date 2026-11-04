@@ -2,6 +2,7 @@
 
 #include <caligo/core/Math.h>
 #include <caligo/core/Result.h>
+#include <caligo/render/TerrainMesh.h>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -52,7 +53,8 @@ public:
   [[nodiscard]] Result<void> Render(RhiDevice& device, std::span<const RenderItem> items,
                                     const RenderCamera& camera, const RenderLight& light,
                                     uint32_t width, uint32_t height,
-                                    const RenderEnvironment& environment = {});
+                                    const RenderEnvironment& environment = {},
+                                    std::span<const TerrainSurface> terrains = {});
   [[nodiscard]] void* ColorView() const noexcept;
   [[nodiscard]] Result<std::vector<uint8_t>> ReadColor() const;
   [[nodiscard]] uint32_t Width() const noexcept;

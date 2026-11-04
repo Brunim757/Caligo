@@ -21,6 +21,16 @@ namespace caligo::editor {
 
 enum class GizmoOperation { Translate, Rotate, Scale };
 enum class GizmoSpace { Local, World };
+enum class TerrainBrushMode { Raise, Lower, Smooth, Flatten, Paint };
+
+struct TerrainBrush {
+  bool active = false;
+  bool stroking = false;
+  TerrainBrushMode mode = TerrainBrushMode::Raise;
+  float radius = 6.0f;
+  float strength = 4.0f;
+  uint32_t layer = 0;
+};
 
 struct Camera {
   math::Vec3 target{0.0f, 0.0f, 0.0f};
@@ -68,6 +78,7 @@ struct EditorState {
   Camera camera;
   GizmoOperation operation = GizmoOperation::Translate;
   GizmoSpace space = GizmoSpace::Local;
+  TerrainBrush terrainBrush;
   bool orbiting = false;
   bool panning = false;
 

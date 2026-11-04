@@ -9,6 +9,7 @@ add_executable(caligo_tests
   platform/test_file.cpp
   scene/test_scene.cpp
   scene/test_serialization.cpp
+  scene/test_terrain.cpp
   script/test_script_host.cpp
   audio/test_clip.cpp
   audio/test_device.cpp
@@ -18,6 +19,7 @@ add_executable(caligo_tests
   render/test_render_graph.cpp
   render/test_scene_renderer.cpp
   render/test_sky.cpp
+  render/test_terrain.cpp
   editor/test_console.cpp
   editor/test_viewport.cpp
 )

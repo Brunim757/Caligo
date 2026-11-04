@@ -140,6 +140,71 @@ bool IsFinite(const Transform& transform) noexcept {
   return IsFinite(transform.position) && IsFinite(transform.rotation) && IsFinite(transform.scale);
 }
 
+bool IsValidTerrain(const Terrain& terrain) noexcept {
+  if (terrain.resolution < kTerrainMinResolution || terrain.resolution > kTerrainMaxResolution) {
+    return false;
+  }
+  if (!std::isfinite(terrain.extent) || terrain.extent < kTerrainMinExtent ||
+      terrain.extent > kTerrainMaxExtent) {
+    return false;
+  }
+  const size_t sampleCount = static_cast<size_t>(terrain.resolution) * terrain.resolution;
+  if (terrain.heights.size() != sampleCount ||
+      terrain.layerWeights.size() != sampleCount * kTerrainLayers) {
+    return false;
+  }
+  for (const float height : terrain.heights) {
+    if (!std::isfinite(height) || std::abs(height) > kTerrainMaxHeight) {
+      return false;
+    }
+  }
+  for (const float weight : terrain.layerWeights) {
+    if (!std::isfinite(weight) || weight < 0.0f || weight > 1.0f) {
+      return false;
+    }
+  }
+  for (const math::Vec3& color : terrain.layerColors) {
+    if (!IsFinite(color)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+float TerrainSpacing(const Terrain& terrain) noexcept {
+  if (terrain.resolution < kTerrainMinResolution) {
+    return 0.0f;
+  }
+  return terrain.extent / static_cast<float>(terrain.resolution - 1);
+}
+
+float TerrainHeightAt(const Terrain& terrain, float localX, float localZ) noexcept {
+  const size_t sampleCount = static_cast<size_t>(terrain.resolution) * terrain.resolution;
+  if (terrain.resolution < kTerrainMinResolution || terrain.heights.size() != sampleCount) {
+    return 0.0f;
+  }
+  const float spacing = TerrainSpacing(terrain);
+  if (!(spacing > 0.0f)) {
+    return 0.0f;
+  }
+  const float half = terrain.extent * 0.5f;
+  const float maximum = static_cast<float>(terrain.resolution - 1);
+  float gridX = math::Clamp((localX + half) / spacing, 0.0f, maximum);
+  float gridZ = math::Clamp((localZ + half) / spacing, 0.0f, maximum);
+  const uint32_t x0 = static_cast<uint32_t>(gridX);
+  const uint32_t z0 = static_cast<uint32_t>(gridZ);
+  const uint32_t x1 = std::min(x0 + 1, terrain.resolution - 1);
+  const uint32_t z1 = std::min(z0 + 1, terrain.resolution - 1);
+  const float fractionX = gridX - static_cast<float>(x0);
+  const float fractionZ = gridZ - static_cast<float>(z0);
+  const auto sample = [&terrain](uint32_t x, uint32_t z) {
+    return terrain.heights[static_cast<size_t>(z) * terrain.resolution + x];
+  };
+  const float top = math::Lerp(sample(x0, z0), sample(x1, z0), fractionX);
+  const float bottom = math::Lerp(sample(x0, z1), sample(x1, z1), fractionX);
+  return math::Lerp(top, bottom, fractionZ);
+}
+
 Scene::Scene() : m_guid(GenerateGuid()) {}
 
 const std::string& Scene::Guid() const noexcept {
@@ -169,6 +234,66 @@ bool Scene::SetEnvironment(const WorldEnvironment& environment) {
   m_environment = environment;
   ++m_revision;
   return true;
+}
+
+bool Scene::AddTerrain(EntityId id, uint32_t resolution, float extent) {
+  Entity* entity = Find(id);
+  if (entity == nullptr || entity->terrain.has_value()) {
+    return false;
+  }
+  if (resolution < kTerrainMinResolution || resolution > kTerrainMaxResolution ||
+      !std::isfinite(extent) || extent < kTerrainMinExtent || extent > kTerrainMaxExtent) {
+    return false;
+  }
+  Terrain terrain;
+  terrain.resolution = resolution;
+  terrain.extent = extent;
+  const size_t sampleCount = static_cast<size_t>(resolution) * resolution;
+  terrain.heights.assign(sampleCount, 0.0f);
+  terrain.layerWeights.assign(sampleCount * kTerrainLayers, 0.0f);
+  for (size_t sample = 0; sample < sampleCount; ++sample) {
+    terrain.layerWeights[sample * kTerrainLayers] = 1.0f;
+  }
+  entity->terrain = std::move(terrain);
+  ++m_revision;
+  return true;
+}
+
+bool Scene::SetTerrain(EntityId id, Terrain terrain) {
+  Entity* entity = Find(id);
+  if (entity == nullptr || !IsValidTerrain(terrain)) {
+    return false;
+  }
+  entity->terrain = std::move(terrain);
+  ++m_revision;
+  return true;
+}
+
+bool Scene::RemoveTerrain(EntityId id) {
+  Entity* entity = Find(id);
+  if (entity == nullptr || !entity->terrain.has_value()) {
+    return false;
+  }
+  entity->terrain.reset();
+  ++m_revision;
+  return true;
+}
+
+const Terrain* Scene::FindTerrain(EntityId id) const noexcept {
+  const Entity* entity = Find(id);
+  if (entity == nullptr || !entity->terrain.has_value()) {
+    return nullptr;
+  }
+  return &entity->terrain.value();
+}
+
+Terrain* Scene::EditTerrain(EntityId id) noexcept {
+  Entity* entity = Find(id);
+  if (entity == nullptr || !entity->terrain.has_value()) {
+    return nullptr;
+  }
+  ++m_revision;
+  return &entity->terrain.value();
 }
 
 EntityId Scene::CreateEntity(std::string_view name, EntityId parent) {
@@ -413,6 +538,9 @@ Result<void> Scene::Validate() const {
           return Error{std::format("entity {} repeats the script type '{}'", entity.id, type), 11};
         }
       }
+    }
+    if (entity.terrain.has_value() && !IsValidTerrain(entity.terrain.value())) {
+      return Error{std::format("entity {} has an invalid terrain", entity.id), 13};
     }
     largestId = std::max(largestId, entity.id);
   }

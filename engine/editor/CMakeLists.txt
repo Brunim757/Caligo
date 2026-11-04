@@ -10,6 +10,7 @@ add_library(caligo_editor STATIC
   src/HierarchyPanel.cpp
   src/InspectorPanel.cpp
   src/SkyTool.cpp
+  src/TerrainTool.cpp
   src/ViewportCanvas.cpp
   src/ViewportPanel.cpp
 )

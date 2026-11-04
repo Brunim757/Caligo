@@ -76,23 +76,36 @@ math::Vec3 SafeLightDirection(const math::Vec3& direction) noexcept {
   return math::Normalize(direction);
 }
 
-SceneBounds ComputeBounds(std::span<const RenderItem> items) {
+void ExpandBounds(SceneBounds& bounds, const math::Vec3& point) noexcept {
+  if (!bounds.valid) {
+    bounds.minimum = point;
+    bounds.maximum = point;
+    bounds.valid = true;
+    return;
+  }
+  bounds.minimum.x = std::min(bounds.minimum.x, point.x);
+  bounds.minimum.y = std::min(bounds.minimum.y, point.y);
+  bounds.minimum.z = std::min(bounds.minimum.z, point.z);
+  bounds.maximum.x = std::max(bounds.maximum.x, point.x);
+  bounds.maximum.y = std::max(bounds.maximum.y, point.y);
+  bounds.maximum.z = std::max(bounds.maximum.z, point.z);
+}
+
+SceneBounds ComputeBounds(std::span<const RenderItem> items,
+                          std::span<const TerrainGeometry> terrains) {
   SceneBounds bounds;
   for (const RenderItem& item : items) {
     for (const math::Vec3& corner : kUnitCorners) {
-      const math::Vec3 point = math::TransformPoint(item.world, corner);
-      if (!bounds.valid) {
-        bounds.minimum = point;
-        bounds.maximum = point;
-        bounds.valid = true;
-        continue;
-      }
-      bounds.minimum.x = std::min(bounds.minimum.x, point.x);
-      bounds.minimum.y = std::min(bounds.minimum.y, point.y);
-      bounds.minimum.z = std::min(bounds.minimum.z, point.z);
-      bounds.maximum.x = std::max(bounds.maximum.x, point.x);
-      bounds.maximum.y = std::max(bounds.maximum.y, point.y);
-      bounds.maximum.z = std::max(bounds.maximum.z, point.z);
+      ExpandBounds(bounds, math::TransformPoint(item.world, corner));
+    }
+  }
+  for (const TerrainGeometry& terrain : terrains) {
+    for (const math::Vec3& corner : kUnitCorners) {
+      math::Vec3 local;
+      local.x = corner.x < 0.0f ? terrain.boundsMinimum.x : terrain.boundsMaximum.x;
+      local.y = corner.y < 0.0f ? terrain.boundsMinimum.y : terrain.boundsMaximum.y;
+      local.z = corner.z < 0.0f ? terrain.boundsMinimum.z : terrain.boundsMaximum.z;
+      ExpandBounds(bounds, math::TransformPoint(terrain.world, local));
     }
   }
   return bounds;
@@ -202,6 +215,7 @@ ShadowMap::~ShadowMap() = default;
 
 Result<void> ShadowMap::Render(RhiDevice& device, const MeshGeometry& mesh,
                                std::span<const RenderItem> items,
+                               std::span<const TerrainGeometry> terrains,
                                const math::Vec3& lightDirection) {
   m_impl->hasContent = false;
   if (!m_impl->initialized) {
@@ -210,7 +224,8 @@ Result<void> ShadowMap::Render(RhiDevice& device, const MeshGeometry& mesh,
       return created.GetError();
     }
   }
-  if (items.empty() || mesh.vertices == nullptr || mesh.indices == nullptr) {
+  const bool hasMesh = mesh.vertices != nullptr && mesh.indices != nullptr;
+  if (!hasMesh && terrains.empty()) {
     return {};
   }
 
@@ -220,7 +235,8 @@ Result<void> ShadowMap::Render(RhiDevice& device, const MeshGeometry& mesh,
     return Error{"shadow map has no depth target", 1};
   }
 
-  m_impl->lightViewProjection = ComputeLightViewProjection(ComputeBounds(items), lightDirection);
+  m_impl->lightViewProjection = ComputeLightViewProjection(
+      ComputeBounds(hasMesh ? items : std::span<const RenderItem>{}, terrains), lightDirection);
 
   context->OMSetRenderTargets(0, nullptr, depthView);
   D3D11_VIEWPORT viewport{};
@@ -240,25 +256,50 @@ Result<void> ShadowMap::Render(RhiDevice& device, const MeshGeometry& mesh,
       static_cast<ID3D11DepthStencilState*>(m_impl->pipeline->DepthStencilState()), 0);
   context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-  ID3D11Buffer* vertexBuffer = static_cast<ID3D11Buffer*>(mesh.vertices->Handle());
-  UINT vertexStride = static_cast<UINT>(mesh.vertexStride);
-  UINT vertexOffset = 0;
-  context->IASetVertexBuffers(0, 1, &vertexBuffer, &vertexStride, &vertexOffset);
-  context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(mesh.indices->Handle()),
-                            DXGI_FORMAT_R16_UINT, 0);
   ID3D11Buffer* constantBuffer = static_cast<ID3D11Buffer*>(m_impl->constants->Handle());
   context->VSSetConstantBuffers(0, 1, &constantBuffer);
 
-  for (const RenderItem& item : items) {
+  if (hasMesh) {
+    ID3D11Buffer* vertexBuffer = static_cast<ID3D11Buffer*>(mesh.vertices->Handle());
+    UINT vertexStride = static_cast<UINT>(mesh.vertexStride);
+    UINT vertexOffset = 0;
+    context->IASetVertexBuffers(0, 1, &vertexBuffer, &vertexStride, &vertexOffset);
+    context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(mesh.indices->Handle()),
+                              DXGI_FORMAT_R16_UINT, 0);
+
+    for (const RenderItem& item : items) {
+      ShadowConstants constants;
+      constants.world = item.world;
+      constants.lightViewProjection = m_impl->lightViewProjection;
+      const Result<void> updated =
+          m_impl->constants->Update(device, &constants, static_cast<uint32_t>(sizeof(constants)));
+      if (!updated) {
+        return updated.GetError();
+      }
+      context->DrawIndexed(static_cast<UINT>(mesh.indexCount), 0, 0);
+    }
+  }
+
+  for (const TerrainGeometry& terrain : terrains) {
+    if (terrain.vertices == nullptr || terrain.indices == nullptr || terrain.indexCount == 0) {
+      continue;
+    }
+    ID3D11Buffer* vertexBuffer = static_cast<ID3D11Buffer*>(terrain.vertices->Handle());
+    UINT vertexStride = static_cast<UINT>(terrain.vertexStride);
+    UINT vertexOffset = 0;
+    context->IASetVertexBuffers(0, 1, &vertexBuffer, &vertexStride, &vertexOffset);
+    context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(terrain.indices->Handle()),
+                              DXGI_FORMAT_R16_UINT, 0);
+
     ShadowConstants constants;
-    constants.world = item.world;
+    constants.world = terrain.world;
     constants.lightViewProjection = m_impl->lightViewProjection;
     const Result<void> updated =
         m_impl->constants->Update(device, &constants, static_cast<uint32_t>(sizeof(constants)));
     if (!updated) {
       return updated.GetError();
     }
-    context->DrawIndexed(static_cast<UINT>(mesh.indexCount), 0, 0);
+    context->DrawIndexed(static_cast<UINT>(terrain.indexCount), 0, 0);
   }
 
   context->OMSetRenderTargets(0, nullptr, nullptr);

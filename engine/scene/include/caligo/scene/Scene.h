@@ -1,9 +1,11 @@
 #pragma once
 
+#include <array>
 #include <caligo/core/Math.h>
 #include <caligo/core/Result.h>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -16,6 +18,12 @@ inline constexpr EntityId kNoEntity = 0;
 inline constexpr uint32_t kMaxHierarchyDepth = 256;
 inline constexpr size_t kMaxScriptsPerEntity = 32;
 inline constexpr size_t kMaxScriptTypeLength = 128;
+inline constexpr uint32_t kTerrainLayers = 4;
+inline constexpr uint32_t kTerrainMinResolution = 2;
+inline constexpr uint32_t kTerrainMaxResolution = 255;
+inline constexpr float kTerrainMinExtent = 1.0f;
+inline constexpr float kTerrainMaxExtent = 8192.0f;
+inline constexpr float kTerrainMaxHeight = 16384.0f;
 
 struct Transform {
   math::Vec3 position{0.0f, 0.0f, 0.0f};
@@ -31,12 +39,23 @@ struct WorldEnvironment {
   float skyHours = 12.0f;
 };
 
+struct Terrain {
+  uint32_t resolution = 0;
+  float extent = 64.0f;
+  std::vector<float> heights;
+  std::vector<float> layerWeights;
+  std::array<math::Vec3, kTerrainLayers> layerColors{
+      math::Vec3{0.24f, 0.38f, 0.20f}, math::Vec3{0.42f, 0.34f, 0.22f},
+      math::Vec3{0.46f, 0.46f, 0.48f}, math::Vec3{0.86f, 0.88f, 0.94f}};
+};
+
 struct Entity {
   EntityId id = kNoEntity;
   EntityId parent = kNoEntity;
   std::string name;
   Transform transform;
   std::vector<ScriptComponent> scripts;
+  std::optional<Terrain> terrain;
 };
 
 [[nodiscard]] std::string GenerateGuid();
@@ -45,6 +64,9 @@ struct Entity {
 [[nodiscard]] bool IsFinite(const math::Vec3& value) noexcept;
 [[nodiscard]] bool IsFinite(const math::Quat& value) noexcept;
 [[nodiscard]] bool IsFinite(const Transform& transform) noexcept;
+[[nodiscard]] bool IsValidTerrain(const Terrain& terrain) noexcept;
+[[nodiscard]] float TerrainSpacing(const Terrain& terrain) noexcept;
+[[nodiscard]] float TerrainHeightAt(const Terrain& terrain, float localX, float localZ) noexcept;
 
 class Scene final {
 public:
@@ -65,6 +87,12 @@ public:
   [[nodiscard]] bool SetTransform(EntityId id, const Transform& transform);
   [[nodiscard]] bool AddScript(EntityId id, std::string_view type);
   [[nodiscard]] bool RemoveScript(EntityId id, std::string_view type);
+
+  [[nodiscard]] bool AddTerrain(EntityId id, uint32_t resolution, float extent);
+  [[nodiscard]] bool SetTerrain(EntityId id, Terrain terrain);
+  [[nodiscard]] bool RemoveTerrain(EntityId id);
+  [[nodiscard]] const Terrain* FindTerrain(EntityId id) const noexcept;
+  [[nodiscard]] Terrain* EditTerrain(EntityId id) noexcept;
 
   [[nodiscard]] Entity* Find(EntityId id) noexcept;
   [[nodiscard]] const Entity* Find(EntityId id) const noexcept;

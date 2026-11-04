@@ -16,6 +16,7 @@ add_library(caligo_render STATIC
   src/ShadowMap.cpp
   src/Sky.cpp
   src/TaaRenderer.cpp
+  src/TerrainMesh.cpp
 )
 
 target_include_directories(caligo_render PUBLIC include)
