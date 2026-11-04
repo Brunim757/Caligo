@@ -231,6 +231,7 @@ Os ícones cobrem dois trabalhos visuais distintos, em três camadas:
 Regras:
 
 - Cada ícone tem código semântico estável em manifesto versionado. O código é o contrato; o glifo é a implementação e troca sem tocar em dado, cena ou código.
+- O arquivo de script usa o documento marcado pela linguagem (`document_cs`); a marca solta (`code_cs`) identifica o componente ou a categoria de script no inspetor.
 - O ícone de tipo pode usar a variante colorida. A cor de estado, com os tokens de erro, aviso e sucesso, é sobreposta e nunca substitui o tipo.
 - Botão só de ícone tem tooltip. Ação primária usa ícone e texto.
 - Nenhum ícone é emoji ou caractere Unicode avulso.

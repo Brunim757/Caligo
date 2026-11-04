@@ -324,6 +324,8 @@ Toda linha do navegador tem ícone. Não existe linha só de texto, e o mesmo í
 
 O glifo Fluent é o nome-base, sem sufixo de tamanho ou estilo (`folder`, não `folder_24_regular`).
 
+Nas linguagens, há duas formas: o **documento marcado** (`document_cs`) é o arquivo na linha do navegador; a **marca solta** (`code_cs`) é o componente ou a categoria de script no inspetor. Os documentos marcados por linguagem existem só em 16 px, que é o padrão do navegador.
+
 | Entrada | Código | Ícone |
 |---|---|---|
 | Pasta fechada / aberta | `folder` / `folder-open` | Fluent `folder` / `folder_open` |
@@ -336,8 +338,8 @@ O glifo Fluent é o nome-base, sem sufixo de tamanho ou estilo (`folder`, não `
 | Textura | `texture` | Fluent `image` |
 | Material | `material` | Fluent `color_fill` |
 | Áudio | `audio` | Fluent `music_note_2` |
-| Script `.cs` | `script` | Fluent `code_cs` |
-| Projeto C# `.csproj` | `script-project` | Fluent `code_block` |
+| Script `.cs` | `script` | Fluent `document_cs` |
+| Projeto C# `.csproj` | `script-project` | Fluent `document_code` |
 | Cozido `.casset` | `cooked` | Caligo `cooked` |
 | Manifesto `.casset` tipo 9 | `manifest` | Fluent `clipboard` |
 | `build.json` | `build` | Fluent `data_usage` |
