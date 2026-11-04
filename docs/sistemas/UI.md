@@ -1,10 +1,12 @@
 # Caligo — UI de Jogo
 
-Versão 0.1
+Versão 0.2
 
 ## 1. Responsabilidade
 
 O sistema de UI de jogo desenha, organiza, anima e traduz tudo que o jogador vê fora do mundo 3D: HUD, menus, diálogos, notificações, mapa, marcadores e prompts. Ele não é o editor. O editor usa ImGui; o jogo usa a UI da Caligo. São dois sistemas separados, com regras e orçamentos próprios.
+
+O fluxo de ferramentas do editor, a moldura da tela e a ferramenta de UI estão em `docs/sistemas/EDITOR.md`. Este documento cobre apenas a UI que o jogador vê.
 
 ## 2. Pipeline
 
@@ -169,6 +171,7 @@ public sealed class Hud : UiDocument
 - Undo/redo integrado ao undo do editor.
 - O editor altera o markup, não um formato paralelo.
 - Pré-visualização com dados falsos e com dados reais do play.
+- A ferramenta de UI vive na moldura descrita em `docs/sistemas/EDITOR.md`; ela não compartilha widgets com o runtime do jogo.
 
 ## 17. Falhas
 
@@ -192,3 +195,8 @@ public sealed class Hud : UiDocument
 - Framework de UI de terceiros no runtime.
 - UI 3D diegética complexa (telas interativas no mundo) antes da fatia.
 - Suporte a VR.
+
+## 20. Histórico
+
+- **0.2** — referencia o editor por ferramentas em `docs/sistemas/EDITOR.md`; o contrato da UI de jogo não muda.
+- **0.1** — documento inicial da UI de jogo.
