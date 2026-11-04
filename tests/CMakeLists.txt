@@ -7,6 +7,7 @@ add_executable(caligo_tests
   core/test_math.cpp
   platform/test_input.cpp
   platform/test_file.cpp
+  build/test_project.cpp
   scene/test_scene.cpp
   scene/test_serialization.cpp
   scene/test_terrain.cpp
@@ -28,6 +29,7 @@ target_link_libraries(caligo_tests PRIVATE
   caligo_core
   caligo_platform
   caligo_scene
+  caligo_build
   caligo_script
   caligo_audio
   caligo_render

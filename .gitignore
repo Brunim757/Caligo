@@ -1,4 +1,4 @@
-build/
+#build/          # ignore top-level build directory (CI artifacts)
 out/
 .vs/
 *.user
