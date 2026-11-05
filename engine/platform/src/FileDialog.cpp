@@ -1,3 +1,7 @@
+#include <windows.h>
+
+#include <commdlg.h>
+
 #include <algorithm>
 #include <caligo/platform/FileDialog.h>
 #include <cstddef>
