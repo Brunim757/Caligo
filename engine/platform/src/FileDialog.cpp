@@ -98,6 +98,7 @@ ShowSaveFileDialog(std::string_view title, std::string_view filter,
 Result<std::optional<std::filesystem::path>>
 ShowOpenFolderDialog(std::string_view title, const std::filesystem::path& initialDirectory,
                      void* ownerWindow) {
+  (void)initialDirectory;
   const std::wstring titleWide = ToWide(title);
   BROWSEINFOW info{};
   info.hwndOwner = static_cast<HWND>(ownerWindow);
