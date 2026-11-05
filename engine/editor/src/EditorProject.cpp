@@ -37,7 +37,7 @@ void EnterProject(EditorState& state) {
     const std::filesystem::path scenePath =
         build::ProjectInitialScene(state.projectPath, *state.project);
     if (platform::FileExists(scenePath)) {
-      LoadSceneFile(state, scenePath);
+      static_cast<void>(LoadSceneFile(state, scenePath));
     } else {
       NewScene(state);
     }
@@ -106,7 +106,7 @@ void CreateProject(EditorState& state, const std::filesystem::path& directory,
   }
 
   scene::Scene scene;
-  scene.CreateEntity("Mundo");
+  static_cast<void>(scene.CreateEntity("Mundo"));
   const Result<std::string> sceneText = scene::SaveSceneToString(scene);
   if (sceneText) {
     const std::filesystem::path scenePath = projectDir / "content" / "scenes" / "inicio.cscene";
