@@ -80,10 +80,11 @@ void CreateProject(EditorState& state, const std::filesystem::path& directory,
     return;
   }
   std::filesystem::path projectDir = directory / name;
-  std::filesystem::create_directories(projectDir / "content" / "scenes", error);
-  std::filesystem::create_directories(projectDir / "content" / "assets", error);
-  std::filesystem::create_directories(projectDir / "scripts" / (name + ".Gameplay"), error);
-  std::filesystem::create_directories(projectDir / "out", error);
+  static_cast<void>(std::filesystem::create_directories(projectDir / "content" / "scenes", error));
+  static_cast<void>(std::filesystem::create_directories(projectDir / "content" / "assets", error));
+  static_cast<void>(
+      std::filesystem::create_directories(projectDir / "scripts" / (name + ".Gameplay"), error));
+  static_cast<void>(std::filesystem::create_directories(projectDir / "out", error));
 
   build::Project project;
   project.name = name;
@@ -154,7 +155,7 @@ void DrawProjectHub(EditorState& state) {
   ImGui::Spacing();
   if (ImGui::Button("Criar novo projeto", ImVec2(Pixels(state, 280.0f), 0.0f))) {
     const Result<std::optional<std::filesystem::path>> chosen = platform::ShowOpenFolderDialog(
-        "Selecionar pasta para o projeto",
+        "Selecionar pasta para o projeto", std::filesystem::path{},
         state.window != nullptr ? state.window->NativeHandle() : nullptr);
     if (chosen && chosen.Value().has_value()) {
       CreateProject(state, *chosen.Value(), state.newProjectName);
