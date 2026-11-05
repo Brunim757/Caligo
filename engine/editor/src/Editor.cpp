@@ -74,6 +74,7 @@ Editor::~Editor() {
 }
 
 Result<void> Editor::Initialize(platform::Window& window, const std::filesystem::path& scenePath) {
+  (void)scenePath;
   if (m_state != nullptr) {
     return Error{"editor is already initialized", 1};
   }
