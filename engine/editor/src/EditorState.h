@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <caligo/build/Project.h>
 #include <caligo/core/Log.h>
 #include <caligo/core/Math.h>
 #include <caligo/core/Time.h>
@@ -14,6 +15,7 @@
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -44,7 +46,12 @@ struct Camera {
   void Focus(const math::Vec3& point) noexcept;
 };
 
-enum class PendingAction { None, NewScene, OpenScene, Quit };
+enum class PendingAction { None, NewScene, OpenScene, Quit, OpenProject, NewProject };
+enum class EditorMode { Hub, Editor };
+struct RecentProject {
+  std::filesystem::path path;
+  std::string name;
+};
 
 struct PlaySession {
   bool active = false;
@@ -65,6 +72,13 @@ struct EditorState {
   scene::EntityId selected = scene::kNoEntity;
   std::filesystem::path scenePath;
   uint64_t savedRevision = 0;
+
+  EditorMode mode = EditorMode::Hub;
+  std::filesystem::path projectPath;
+  std::optional<build::Project> project;
+  std::vector<RecentProject> recentProjects;
+  std::filesystem::path pendingProjectPath;
+  std::string newProjectName = "NovoJogo";
 
   bool initialized = false;
   bool imguiContext = false;

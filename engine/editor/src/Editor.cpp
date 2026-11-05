@@ -120,12 +120,7 @@ Result<void> Editor::Initialize(platform::Window& window, const std::filesystem:
     CALIGO_LOG_WARN("não foi possível localizar os scripts: {}", executable.GetError().message);
   }
 
-  const std::filesystem::path path = scenePath.empty() ? DefaultScenePath() : scenePath;
-  if (path.empty() || !LoadSceneFile(*m_state, path)) {
-    NewScene(*m_state);
-  }
-
-  UpdateWindowTitle(*m_state);
+  m_state->mode = EditorMode::Hub;
   m_state->initialized = true;
   CALIGO_LOG_INFO("editor pronto: {} x {}", width, height);
   return {};
@@ -167,12 +162,17 @@ bool Editor::Frame() {
   ImGuizmo::BeginFrame();
 
   DrawMainMenu(*m_state);
-  DrawDockSpace(*m_state);
-  DrawHierarchy(*m_state);
-  DrawInspector(*m_state);
-  DrawViewport(*m_state);
-  DrawConsole(*m_state);
-  DrawModals(*m_state);
+  if (m_state->mode == EditorMode::Hub) {
+    DrawProjectHub(*m_state);
+    DrawModals(*m_state);
+  } else {
+    DrawDockSpace(*m_state);
+    DrawHierarchy(*m_state);
+    DrawInspector(*m_state);
+    DrawViewport(*m_state);
+    DrawConsole(*m_state);
+    DrawModals(*m_state);
+  }
 
   ImGui::Render();
   m_state->graphics.BeginFrame(0.075f, 0.086f, 0.105f, 1.0f);

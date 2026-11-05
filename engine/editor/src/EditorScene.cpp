@@ -230,9 +230,15 @@ void UpdateWindowTitle(EditorState& state) {
   if (state.window == nullptr) {
     return;
   }
-  const std::string name =
-      state.scenePath.empty() ? std::string("Sem título") : PathFileName(state.scenePath);
-  const std::string title = std::format("{} — Caligo Editor{}", IsDirty(state) ? name + " *" : name,
+  std::string base;
+  if (state.project.has_value()) {
+    base = state.project->name;
+  } else if (!state.scenePath.empty()) {
+    base = PathFileName(state.scenePath);
+  } else {
+    base = std::string("Sem título");
+  }
+  const std::string title = std::format("{} — Caligo Editor{}", IsDirty(state) ? base + " *" : base,
                                         state.play.active ? " (executando)" : "");
   if (title != state.windowTitle) {
     state.windowTitle = title;

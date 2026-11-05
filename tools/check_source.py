@@ -46,6 +46,7 @@ MODULE_DEPENDENCIES = {
         "animation",
         "script",
         "game",
+        "build",
     },
 }
 
