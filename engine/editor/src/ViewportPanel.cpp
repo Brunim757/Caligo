@@ -1,10 +1,13 @@
 #include "EditorPanels.h"
+#include "SkyTool.h"
+#include "TerrainTool.h"
 #include <ImGuizmo.h>
 #include <algorithm>
 #include <array>
 #include <caligo/core/Log.h>
 #include <caligo/editor/ViewportCanvas.h>
 #include <caligo/render/RhiDevice.h>
+#include <caligo/render/Sky.h>
 #include <cmath>
 #include <format>
 #include <imgui.h>
@@ -190,6 +193,11 @@ void HandleShortcuts(EditorState& state, bool hovered) {
   if (ImGui::IsKeyPressed(ImGuiKey_R, false)) {
     state.operation = GizmoOperation::Scale;
   }
+  if (ImGui::IsKeyPressed(ImGuiKey_B, false) &&
+      state.scene.FindTerrain(state.selected) != nullptr) {
+    state.terrainBrush.active = !state.terrainBrush.active;
+    state.terrainBrush.stroking = false;
+  }
 }
 
 bool ToolButton(EditorState& state, const char* label, bool active) {
@@ -239,6 +247,10 @@ void DrawToolbar(EditorState& state) {
   } else {
     ImGui::TextDisabled("Ctrl: encaixe");
   }
+  ImGui::SameLine();
+  DrawSkyToolbar(state);
+  ImGui::SameLine();
+  DrawTerrainToolbar(state);
 }
 
 void ManipulateSelection(EditorState& state, const math::Mat4& view, const math::Mat4& projection) {
@@ -446,7 +458,7 @@ std::vector<render::RenderItem> BuildRenderItems(const EditorState& state) {
   for (const scene::Entity& entity : entities) {
     const bool container = entity.parent == scene::kNoEntity &&
                            std::binary_search(parents.begin(), parents.end(), entity.id);
-    if (container) {
+    if (container || entity.terrain.has_value()) {
       continue;
     }
     render::RenderItem item;
@@ -471,8 +483,10 @@ bool DrawScene(EditorState& state, const math::Mat4& view, const math::Mat4& pro
   camera.projection = projection;
 
   const std::vector<render::RenderItem> items = BuildRenderItems(state);
-  const Result<void> rendered =
-      state.sceneRenderer.Render(*device, items, camera, render::RenderLight{}, width, height);
+  const std::vector<render::TerrainSurface> terrains = BuildTerrainSurfaces(state);
+  const render::SkyState sky = render::EvaluateSky(state.scene.Environment().skyHours);
+  const Result<void> rendered = state.sceneRenderer.Render(*device, items, camera, sky.light, width,
+                                                           height, sky.environment, terrains);
   if (!rendered) {
     if (!state.viewportErrorLogged) {
       CALIGO_LOG_ERROR("não foi possível desenhar a cena: {}", rendered.GetError().message);
@@ -548,13 +562,20 @@ void DrawViewport(EditorState& state) {
   }
   DrawMarkers(state, view, projection, markers, hoveredMarker, canvasOrigin, canvasSize);
 
-  if (!state.play.active) {
+  const bool terrainEditing =
+      state.terrainBrush.active && state.scene.FindTerrain(state.selected) != nullptr;
+
+  if (!state.play.active && !terrainEditing) {
     ManipulateSelection(state, view, projection);
   }
 
-  const bool gizmoBusy = !state.play.active && state.scene.Find(state.selected) != nullptr &&
+  const bool gizmoBusy = !state.play.active && !terrainEditing &&
+                         state.scene.Find(state.selected) != nullptr &&
                          (ImGuizmo::IsOver() || ImGuizmo::IsUsing());
-  HandleSelection(state, markers, hovered, gizmoBusy, selectRadius);
+  if (!terrainEditing) {
+    HandleSelection(state, markers, hovered, gizmoBusy, selectRadius);
+  }
+  EditTerrainWithBrush(state, view, projection, canvasOrigin, canvasSize, hovered);
   DrawOverlay(state, canvasOrigin, canvasSize);
 
   drawList->PopClipRect();

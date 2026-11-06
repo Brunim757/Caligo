@@ -33,7 +33,6 @@ struct MeshVertex {
 constexpr float kHalf = 0.5f;
 constexpr int kGridHalfLines = 10;
 constexpr float kShadowBias = 0.0025f;
-constexpr math::Vec3 kBackground{0.020f, 0.025f, 0.035f};
 
 constexpr MeshVertex kCubeVertices[] = {
     {{-kHalf, -kHalf, kHalf}, {0.0f, 0.0f, 1.0f}},
@@ -147,6 +146,7 @@ struct SceneRenderer::Impl {
   LightingPass lighting;
   PostProcessor post;
   TaaRenderer taa;
+  std::vector<std::unique_ptr<TerrainMesh>> terrainMeshes;
   RenderGraph graph;
   std::unique_ptr<RhiTexture> color;
   uint32_t gridVertexCount = 0;
@@ -280,7 +280,9 @@ SceneRenderer::~SceneRenderer() = default;
 
 Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem> items,
                                    const RenderCamera& camera, const RenderLight& light,
-                                   uint32_t width, uint32_t height) {
+                                   uint32_t width, uint32_t height,
+                                   const RenderEnvironment& environment,
+                                   std::span<const TerrainSurface> terrains) {
   if (width == 0 || height == 0) {
     return Error{"scene renderer needs a positive size", 1};
   }
@@ -313,6 +315,27 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   const math::Mat4 inverseViewProjection = math::Inverse(viewProjection);
   const math::Mat4 stableViewProjection = math::Multiply(camera.view, camera.projection);
   const math::Mat4 stableInverseViewProjection = math::Inverse(stableViewProjection);
+  const math::Vec3 cameraPosition =
+      math::TransformPoint(math::Inverse(camera.view), math::Vec3{0.0f, 0.0f, 0.0f});
+
+  if (m_impl->terrainMeshes.size() > terrains.size()) {
+    m_impl->terrainMeshes.resize(terrains.size());
+  }
+  while (m_impl->terrainMeshes.size() < terrains.size()) {
+    m_impl->terrainMeshes.push_back(std::make_unique<TerrainMesh>());
+  }
+  std::vector<TerrainGeometry> terrainGeometry;
+  terrainGeometry.reserve(terrains.size());
+  for (size_t index = 0; index < terrains.size(); ++index) {
+    const Result<void> built = m_impl->terrainMeshes[index]->Update(device, terrains[index]);
+    if (!built) {
+      return built.GetError();
+    }
+    if (m_impl->terrainMeshes[index]->HasSurface()) {
+      terrainGeometry.push_back(m_impl->terrainMeshes[index]->Geometry());
+    }
+  }
+  const std::span<const TerrainGeometry> terrainSpan(terrainGeometry);
 
   RenderGraph& graph = m_impl->graph;
   graph.Reset();
@@ -333,23 +356,24 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
   const RenderGraph::ResourceId depth = graph.CreateTexture(depthDescription);
   const RenderGraph::ResourceId finalColor = graph.ImportTexture(*m_impl->color);
 
-  graph.AddPass([this, &device, mesh, items, light](RenderGraphContext&) {
-    return m_impl->shadowMap.Render(device, mesh, items, light.direction);
+  graph.AddPass([this, &device, mesh, items, light, terrainSpan](RenderGraphContext&) {
+    return m_impl->shadowMap.Render(device, mesh, items, terrainSpan, light.direction);
   });
 
   const RenderGraph::PassId gbufferPass =
-      graph.AddPass([this, &device, mesh, items, viewProjection, albedo, normal,
-                     depth](RenderGraphContext& context) {
-        return m_impl->gbuffer.Render(device, mesh, items, viewProjection, context.Texture(albedo),
-                                      context.Texture(normal), context.Texture(depth));
+      graph.AddPass([this, &device, mesh, items, viewProjection, albedo, normal, depth,
+                     terrainSpan](RenderGraphContext& context) {
+        return m_impl->gbuffer.Render(device, mesh, items, terrainSpan, viewProjection,
+                                      context.Texture(albedo), context.Texture(normal),
+                                      context.Texture(depth));
       });
   graph.Write(gbufferPass, albedo);
   graph.Write(gbufferPass, normal);
   graph.Write(gbufferPass, depth);
 
   const RenderGraph::PassId lightingPass =
-      graph.AddPass([this, &device, light, albedo, normal, depth, hdr, inverseViewProjection, width,
-                     height](RenderGraphContext& context) {
+      graph.AddPass([this, &device, light, environment, cameraPosition, albedo, normal, depth, hdr,
+                     inverseViewProjection, width, height](RenderGraphContext& context) {
         LightingInputs inputs;
         inputs.albedo = context.Texture(albedo).ShaderResourceView();
         inputs.normal = context.Texture(normal).ShaderResourceView();
@@ -362,7 +386,15 @@ Result<void> SceneRenderer::Render(RhiDevice& device, std::span<const RenderItem
         settings.lightViewProjection = m_impl->shadowMap.LightViewProjection();
         settings.lightDirection = SafeLightDirection(light.direction);
         settings.lightColor = light.color;
-        settings.background = kBackground;
+        settings.sunColor = environment.sunColor;
+        settings.cameraPosition = cameraPosition;
+        settings.skyZenith = environment.skyZenith;
+        settings.skyHorizon = environment.skyHorizon;
+        settings.skyGround = environment.skyGround;
+        settings.ambientSky = environment.ambientSky;
+        settings.ambientGround = environment.ambientGround;
+        settings.sunIntensity = environment.sunIntensity;
+        settings.sunAngularRadiusDegrees = environment.sunAngularRadiusDegrees;
         settings.shadowTexel = m_impl->shadowMap.TexelSize();
         settings.shadowBias = kShadowBias;
 

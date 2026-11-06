@@ -19,6 +19,7 @@ MODULE_DEPENDENCIES = {
     "assets": {"core", "platform"},
     "render": {"core", "platform"},
     "scene": {"core", "assets"},
+    "build": {"core", "platform", "assets", "script"},
     "physics": {"core", "scene"},
     "audio": {"core", "assets"},
     "animation": {"core", "scene"},
@@ -45,6 +46,7 @@ MODULE_DEPENDENCIES = {
         "animation",
         "script",
         "game",
+        "build",
     },
 }
 

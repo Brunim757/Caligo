@@ -3,6 +3,7 @@
 #include <caligo/core/Math.h>
 #include <caligo/core/Result.h>
 #include <caligo/render/MeshGeometry.h>
+#include <caligo/render/TerrainMesh.h>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -26,6 +27,7 @@ public:
 
   [[nodiscard]] Result<void> Render(RhiDevice& device, const MeshGeometry& mesh,
                                     std::span<const RenderItem> items,
+                                    std::span<const TerrainGeometry> terrains,
                                     const math::Vec3& lightDirection);
   [[nodiscard]] void* ResourceView() const noexcept;
   [[nodiscard]] void* Sampler() const noexcept;

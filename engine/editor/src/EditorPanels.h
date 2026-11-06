@@ -14,6 +14,7 @@ void DrawInspector(EditorState& state);
 void DrawViewport(EditorState& state);
 void DrawConsole(EditorState& state);
 void DrawModals(EditorState& state);
+void DrawProjectHub(EditorState& state);
 
 void SelectEntity(EditorState& state, scene::EntityId id);
 void CreateEntity(EditorState& state);
@@ -38,5 +39,11 @@ void ReloadScripts(EditorState& state);
 void ApplyTheme(float dpiScale);
 [[nodiscard]] bool InitializeImGui(EditorState& state);
 void ShutdownImGui(EditorState& state) noexcept;
+
+void OpenProject(EditorState& state, const std::filesystem::path& path);
+void CreateProject(EditorState& state, const std::filesystem::path& directory,
+                   const std::string& name);
+void EnterProject(EditorState& state);
+void InitializeProjects(EditorState& state);
 
 }

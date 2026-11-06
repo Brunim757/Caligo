@@ -151,6 +151,18 @@ bool InitializeImGui(EditorState& state) {
         state.consoleFont = consoleFont;
       }
     }
+    const std::filesystem::path boldPath = windowsDirectory.Value() / "Fonts" / "segoeuib.ttf";
+    if (platform::FileExists(boldPath)) {
+      state.hubTitleFont = io.Fonts->AddFontFromFileTTF(boldPath.string().c_str(), 34.0f);
+      state.hubHeadingFont = state.hubTitleFont;
+    }
+    const std::filesystem::path semiboldPath = windowsDirectory.Value() / "Fonts" / "seguisb.ttf";
+    if (platform::FileExists(semiboldPath)) {
+      ImFont* semibold = io.Fonts->AddFontFromFileTTF(semiboldPath.string().c_str(), 18.0f);
+      if (semibold != nullptr) {
+        state.hubHeadingFont = semibold;
+      }
+    }
   }
 
   if (!ImGui_ImplWin32_Init(state.window->NativeHandle())) {

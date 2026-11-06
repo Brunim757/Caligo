@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <format>
 #include <limits>
+#include <shlobj.h>
 #include <string>
 #include <vector>
 
@@ -92,6 +93,28 @@ ShowSaveFileDialog(std::string_view title, std::string_view filter,
                    const std::filesystem::path& initialDirectory, void* ownerWindow) {
   return RunDialog(title, filter, defaultExtension, suggestedFileName, initialDirectory,
                    ownerWindow, true);
+}
+
+Result<std::optional<std::filesystem::path>>
+ShowOpenFolderDialog(std::string_view title, const std::filesystem::path& initialDirectory,
+                     void* ownerWindow) {
+  (void)initialDirectory;
+  const std::wstring titleWide = ToWide(title);
+  BROWSEINFOW info{};
+  info.hwndOwner = static_cast<HWND>(ownerWindow);
+  info.lpszTitle = titleWide.empty() ? nullptr : titleWide.c_str();
+  info.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+  LPITEMIDLIST pidl = SHBrowseForFolderW(&info);
+  if (pidl == nullptr) {
+    return std::optional<std::filesystem::path>{};
+  }
+  wchar_t path[MAX_PATH];
+  if (SHGetPathFromIDListW(pidl, path)) {
+    CoTaskMemFree(pidl);
+    return std::optional<std::filesystem::path>{std::filesystem::path(path)};
+  }
+  CoTaskMemFree(pidl);
+  return std::optional<std::filesystem::path>{};
 }
 
 }

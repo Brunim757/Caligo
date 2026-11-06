@@ -16,4 +16,8 @@ ShowSaveFileDialog(std::string_view title, std::string_view filter,
                    std::string_view defaultExtension, std::string_view suggestedFileName = {},
                    const std::filesystem::path& initialDirectory = {}, void* ownerWindow = nullptr);
 
+[[nodiscard]] Result<std::optional<std::filesystem::path>>
+ShowOpenFolderDialog(std::string_view title, const std::filesystem::path& initialDirectory = {},
+                     void* ownerWindow = nullptr);
+
 }

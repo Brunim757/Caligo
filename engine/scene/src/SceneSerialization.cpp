@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -103,6 +104,75 @@ Result<std::pair<EntityId, EntityId>> ReadIdentity(const Json& entity) {
   return std::pair<EntityId, EntityId>{id, parentValue->get<uint64_t>()};
 }
 
+Result<WorldEnvironment> ReadEnvironment(const Json& root) {
+  const Json* environment = Member(root, "environment");
+  if (environment == nullptr || !environment->is_object()) {
+    return Error{"scene environment must be an object", 50};
+  }
+  const Json* hours = Member(*environment, "hours");
+  WorldEnvironment parsed;
+  if (hours == nullptr || !ReadFloat(*hours, parsed.skyHours) || parsed.skyHours < 0.0f ||
+      parsed.skyHours > 24.0f) {
+    return Error{"scene environment hours must be between 0 and 24", 51};
+  }
+  return parsed;
+}
+
+Result<Terrain> ReadTerrain(const Json& component, EntityId id) {
+  const Json* resolutionValue = Member(component, "resolution");
+  if (resolutionValue == nullptr || !resolutionValue->is_number_unsigned()) {
+    return Error{std::format("entity {} terrain resolution must be an unsigned integer", id), 53};
+  }
+  const uint64_t resolution = resolutionValue->get<uint64_t>();
+  if (resolution < kTerrainMinResolution || resolution > kTerrainMaxResolution) {
+    return Error{std::format("entity {} terrain resolution is out of range", id), 54};
+  }
+  Terrain terrain;
+  terrain.resolution = static_cast<uint32_t>(resolution);
+  const Json* extentValue = Member(component, "extent");
+  if (extentValue == nullptr || !ReadFloat(*extentValue, terrain.extent)) {
+    return Error{std::format("entity {} terrain extent is invalid", id), 55};
+  }
+
+  const size_t sampleCount = static_cast<size_t>(terrain.resolution) * terrain.resolution;
+  const Json* heights = Member(component, "heights");
+  if (heights == nullptr || !heights->is_array() || heights->size() != sampleCount) {
+    return Error{std::format("entity {} terrain heights count is invalid", id), 56};
+  }
+  terrain.heights.resize(sampleCount);
+  for (size_t sample = 0; sample < sampleCount; ++sample) {
+    if (!ReadFloat((*heights)[sample], terrain.heights[sample])) {
+      return Error{std::format("entity {} terrain has an invalid height", id), 57};
+    }
+  }
+
+  const Json* layers = Member(component, "layers");
+  if (layers == nullptr || !layers->is_array() || layers->size() != sampleCount * kTerrainLayers) {
+    return Error{std::format("entity {} terrain layer weights count is invalid", id), 58};
+  }
+  terrain.layerWeights.resize(sampleCount * kTerrainLayers);
+  for (size_t index = 0; index < terrain.layerWeights.size(); ++index) {
+    if (!ReadFloat((*layers)[index], terrain.layerWeights[index])) {
+      return Error{std::format("entity {} terrain has an invalid layer weight", id), 59};
+    }
+  }
+
+  const Json* colors = Member(component, "layerColors");
+  if (colors == nullptr || !colors->is_array() || colors->size() != kTerrainLayers) {
+    return Error{std::format("entity {} terrain layer colors count is invalid", id), 60};
+  }
+  for (uint32_t layer = 0; layer < kTerrainLayers; ++layer) {
+    if (!ReadVec3((*colors)[layer], terrain.layerColors[layer])) {
+      return Error{std::format("entity {} terrain has an invalid layer color", id), 61};
+    }
+  }
+
+  if (!IsValidTerrain(terrain)) {
+    return Error{std::format("entity {} terrain is invalid", id), 62};
+  }
+  return terrain;
+}
+
 Result<std::string> ReadName(const Json& entity, EntityId id) {
   const Json* name = Member(entity, "name");
   if (name == nullptr || !name->is_string()) {
@@ -114,6 +184,7 @@ Result<std::string> ReadName(const Json& entity, EntityId id) {
 struct EntityComponents {
   Transform transform;
   std::vector<std::string> scripts;
+  std::optional<Terrain> terrain;
 };
 
 Result<EntityComponents> ReadComponents(const Json& entity, EntityId id) {
@@ -162,6 +233,17 @@ Result<EntityComponents> ReadComponents(const Json& entity, EntityId id) {
       parsed.scripts.push_back(className);
       continue;
     }
+    if (typeName == "caligo.terrain") {
+      if (parsed.terrain.has_value()) {
+        return Error{std::format("entity {} has more than one terrain", id), 63};
+      }
+      Result<Terrain> terrain = ReadTerrain(component, id);
+      if (!terrain) {
+        return terrain.GetError();
+      }
+      parsed.terrain = std::move(terrain).Value();
+      continue;
+    }
     return Error{std::format("entity {} uses unsupported component {}", id, typeName), 26};
   }
   if (!hasTransform) {
@@ -200,6 +282,9 @@ Result<Entity> ReadEntity(const Json& value) {
     component.type = std::move(script);
     entity.scripts.push_back(std::move(component));
   }
+  if (components.Value().terrain.has_value()) {
+    entity.terrain = std::move(components.Value().terrain);
+  }
   return entity;
 }
 
@@ -213,8 +298,10 @@ Result<std::string> SaveSceneToString(const Scene& scene) {
 
   Json root = Json::object();
   root["format"] = "caligo.scene";
-  root["version"] = 2;
+  root["version"] = 3;
   root["guid"] = scene.Guid();
+  root["environment"] = Json::object();
+  root["environment"]["hours"] = scene.Environment().skyHours;
   root["entities"] = Json::array();
 
   std::vector<const Entity*> sorted;
@@ -241,6 +328,29 @@ Result<std::string> SaveSceneToString(const Scene& scene) {
       Json component = Json::object();
       component["type"] = "caligo.script";
       component["class"] = script.type;
+      components.push_back(std::move(component));
+    }
+    if (entity->terrain.has_value()) {
+      const Terrain& terrain = entity->terrain.value();
+      Json component = Json::object();
+      component["type"] = "caligo.terrain";
+      component["resolution"] = terrain.resolution;
+      component["extent"] = terrain.extent;
+      Json heights = Json::array();
+      for (const float height : terrain.heights) {
+        heights.push_back(height);
+      }
+      component["heights"] = std::move(heights);
+      Json weights = Json::array();
+      for (const float weight : terrain.layerWeights) {
+        weights.push_back(weight);
+      }
+      component["layers"] = std::move(weights);
+      Json colors = Json::array();
+      for (const math::Vec3& color : terrain.layerColors) {
+        colors.push_back(Json::array({color.x, color.y, color.z}));
+      }
+      component["layerColors"] = std::move(colors);
       components.push_back(std::move(component));
     }
 
@@ -274,7 +384,7 @@ Result<Scene> LoadSceneFromString(std::string_view text) {
     return Error{"scene version must be an integer", 43};
   }
   const double versionNumber = version->get<double>();
-  if (versionNumber != 1.0 && versionNumber != 2.0) {
+  if (versionNumber != 1.0 && versionNumber != 2.0 && versionNumber != 3.0) {
     return Error{"scene version is not supported", 44};
   }
 
@@ -292,6 +402,15 @@ Result<Scene> LoadSceneFromString(std::string_view text) {
   if (!scene.SetGuid(guid->get<std::string>())) {
     return Error{"scene GUID is invalid", 47};
   }
+  if (versionNumber >= 3.0) {
+    const Result<WorldEnvironment> environment = ReadEnvironment(root);
+    if (!environment) {
+      return environment.GetError();
+    }
+    if (!scene.SetEnvironment(environment.Value())) {
+      return Error{"scene environment could not be applied", 52};
+    }
+  }
 
   for (const Json& value : *entities) {
     Result<Entity> entity = ReadEntity(value);
@@ -308,6 +427,9 @@ Result<Scene> LoadSceneFromString(std::string_view text) {
         return Error{
             std::format("entity {} script '{}' could not be attached", parsed.id, script.type), 49};
       }
+    }
+    if (parsed.terrain.has_value() && !scene.SetTerrain(parsed.id, parsed.terrain.value())) {
+      return Error{std::format("entity {} terrain could not be applied", parsed.id), 64};
     }
   }
 

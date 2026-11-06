@@ -7,6 +7,10 @@ Engine de mundo aberto estilizado da Kizuri Studio.
 - Formatos: [docs/FORMATOS.md](docs/FORMATOS.md)
 - Decisões: [docs/DECISOES.md](docs/DECISOES.md)
 - Manual: [docs/manual/README.md](docs/manual/README.md)
+- Editor: [docs/sistemas/EDITOR.md](docs/sistemas/EDITOR.md)
+- Assets e importação: [docs/sistemas/ASSETS.md](docs/sistemas/ASSETS.md)
+- Build e entrega: [docs/sistemas/BUILD.md](docs/sistemas/BUILD.md)
+- Renderização: [docs/sistemas/RENDER.md](docs/sistemas/RENDER.md)
 - Scripting e play: [docs/sistemas/SCRIPTING.md](docs/sistemas/SCRIPTING.md)
 - UI de jogo: [docs/sistemas/UI.md](docs/sistemas/UI.md)
 
@@ -20,11 +24,13 @@ R0 — fundação. Núcleo, plataforma, janela, input, log, tempo, jobs, testes 
 
 R1 — a engine que se usa. Editor com hierarquia, inspetor, viewport com gizmo e console; cena com entidades e hierarquia em `.cscene`; componentes de script em C#; play-in-editor com tick fixo, pausa, avanço de quadro, recarga e restauração por instantâneo; gravação e abertura com proteção contra perda; tema adaptado a DPI, cena de exemplo e manual.
 
-A próxima fatia é a R2 — imagem: render graph, luz, sombra, TAA, pós-processamento, áudio base e testes de imagem.
+R2 — imagem. Render graph, luz direcional, sombra, TAA, bloom, exposição, mapeamento de tons, áudio base e testes de imagem. Concluída no `main`.
+
+R3 — mundo e produção. Hub de projetos, editor por ferramentas, Configurações, Adicionar componente, identidade de 13 px e ícones, asset browser, terreno profissional, Ambiente, assets com `.cmeta`, cook incremental, compilação C# embutida, malha e material PBR, céu com IBL, CSM, TAA com velocity, névoa e build local do jogo de exemplo. Em desenvolvimento na branch `r3-mundo`.
 
 ## Construir
 
-Windows 10/11 x64, Visual Studio 2022, CMake 3.24+, Ninja, Python 3.13 e .NET SDK 10.
+Windows 10/11 x64, Visual Studio 2022, CMake 3.24+, Ninja, Python 3.13 e .NET SDK 10. O SDK .NET é requisito para desenvolver a engine; o jogo produzido não exige SDK, MSBuild ou NuGet (D-041).
 
 ```powershell
 python -m pip install clang-format==21.1.8

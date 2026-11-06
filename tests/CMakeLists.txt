@@ -7,8 +7,10 @@ add_executable(caligo_tests
   core/test_math.cpp
   platform/test_input.cpp
   platform/test_file.cpp
+  build/test_project.cpp
   scene/test_scene.cpp
   scene/test_serialization.cpp
+  scene/test_terrain.cpp
   script/test_script_host.cpp
   audio/test_clip.cpp
   audio/test_device.cpp
@@ -17,6 +19,8 @@ add_executable(caligo_tests
   render/test_offscreen.cpp
   render/test_render_graph.cpp
   render/test_scene_renderer.cpp
+  render/test_sky.cpp
+  render/test_terrain.cpp
   editor/test_console.cpp
   editor/test_viewport.cpp
 )
@@ -25,6 +29,7 @@ target_link_libraries(caligo_tests PRIVATE
   caligo_core
   caligo_platform
   caligo_scene
+  caligo_build
   caligo_script
   caligo_audio
   caligo_render

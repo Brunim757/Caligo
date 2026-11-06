@@ -22,6 +22,12 @@ constexpr RhiVertexElement kMeshElements[] = {
     {"NORMAL", 0, RhiVertexFormat::Float32x3, 12},
 };
 
+constexpr RhiVertexElement kTerrainElements[] = {
+    {"POSITION", 0, RhiVertexFormat::Float32x3, 0},
+    {"NORMAL", 0, RhiVertexFormat::Float32x3, 12},
+    {"COLOR", 0, RhiVertexFormat::Float32x3, 24},
+};
+
 constexpr char kGBufferShader[] = R"(
 cbuffer GBufferConstants : register(b0) {
   row_major float4x4 world;
@@ -60,6 +66,47 @@ GBufferTargets PsMain(GBufferOutput input) {
 }
 )";
 
+constexpr char kTerrainShader[] = R"(
+cbuffer GBufferConstants : register(b0) {
+  row_major float4x4 world;
+  row_major float4x4 viewProjection;
+  float4 baseColor;
+};
+
+struct TerrainInput {
+  float3 position : POSITION;
+  float3 normal : NORMAL;
+  float3 color : COLOR;
+};
+
+struct TerrainOutput {
+  float4 position : SV_POSITION;
+  float3 normal : NORMAL;
+  float3 color : COLOR;
+};
+
+struct TerrainTargets {
+  float4 albedo : SV_TARGET0;
+  float4 normal : SV_TARGET1;
+};
+
+TerrainOutput VsMain(TerrainInput input) {
+  TerrainOutput output;
+  float4 worldPosition = mul(float4(input.position, 1.0), world);
+  output.position = mul(worldPosition, viewProjection);
+  output.normal = mul(input.normal, (float3x3)world);
+  output.color = input.color;
+  return output;
+}
+
+TerrainTargets PsMain(TerrainOutput input) {
+  TerrainTargets output;
+  output.albedo = float4(input.color, 1.0);
+  output.normal = float4(normalize(input.normal), 1.0);
+  return output;
+}
+)";
+
 struct GBufferConstants {
   math::Mat4 world{};
   math::Mat4 viewProjection{};
@@ -74,6 +121,9 @@ struct GBufferPass::Impl {
   std::unique_ptr<RhiShader> shader;
   std::unique_ptr<RhiInputLayout> layout;
   std::unique_ptr<RhiPipeline> pipeline;
+  std::unique_ptr<RhiShader> terrainShader;
+  std::unique_ptr<RhiInputLayout> terrainLayout;
+  std::unique_ptr<RhiPipeline> terrainPipeline;
   std::unique_ptr<RhiBuffer> constants;
   bool initialized = false;
 };
@@ -99,6 +149,22 @@ Result<void> CreateResources(RhiDevice& device, GBufferPass::Impl& impl) {
     return created.GetError();
   }
 
+  created = detail::CreateShader(device, kTerrainShader, impl.terrainShader);
+  if (!created) {
+    return created.GetError();
+  }
+
+  auto terrainLayout = RhiInputLayout::Create(device, *impl.terrainShader, kTerrainElements);
+  if (!terrainLayout) {
+    return terrainLayout.GetError();
+  }
+  impl.terrainLayout = std::move(terrainLayout).Value();
+
+  created = detail::CreatePipeline(device, pipelineDescription, impl.terrainPipeline);
+  if (!created) {
+    return created.GetError();
+  }
+
   auto constants = RhiBuffer::Create(device, RhiBufferKind::Constant, nullptr,
                                      static_cast<uint32_t>(sizeof(GBufferConstants)));
   if (!constants) {
@@ -118,10 +184,12 @@ GBufferPass::~GBufferPass() = default;
 
 Result<void> GBufferPass::Render(RhiDevice& device, const MeshGeometry& mesh,
                                  std::span<const RenderItem> items,
+                                 std::span<const TerrainGeometry> terrains,
                                  const math::Mat4& viewProjection, const RhiTexture& albedo,
                                  const RhiTexture& normal, const RhiTexture& depth) {
-  if (mesh.vertices == nullptr || mesh.indices == nullptr) {
-    return Error{"g-buffer needs a mesh", 1};
+  const bool hasMesh = mesh.vertices != nullptr && mesh.indices != nullptr;
+  if (!hasMesh && terrains.empty()) {
+    return Error{"g-buffer needs geometry", 1};
   }
   if (!m_impl->initialized) {
     const Result<void> created = CreateResources(device, *m_impl);
@@ -155,32 +223,61 @@ Result<void> GBufferPass::Render(RhiDevice& device, const MeshGeometry& mesh,
   context->ClearRenderTargetView(normalView, clearColor);
   context->ClearDepthStencilView(depthView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-  detail::BindPipeline(context, *m_impl->shader, *m_impl->layout, *m_impl->pipeline);
   context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-  ID3D11Buffer* vertexBuffer = static_cast<ID3D11Buffer*>(mesh.vertices->Handle());
-  UINT stride = static_cast<UINT>(mesh.vertexStride);
-  UINT offset = 0;
-  context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
-  context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(mesh.indices->Handle()),
-                            DXGI_FORMAT_R16_UINT, 0);
   ID3D11Buffer* constantBuffer = static_cast<ID3D11Buffer*>(m_impl->constants->Handle());
   context->VSSetConstantBuffers(0, 1, &constantBuffer);
   context->PSSetConstantBuffers(0, 1, &constantBuffer);
 
-  for (const RenderItem& item : items) {
-    GBufferConstants constants;
-    constants.world = item.world;
-    constants.viewProjection = viewProjection;
-    constants.baseColor[0] = item.color.x;
-    constants.baseColor[1] = item.color.y;
-    constants.baseColor[2] = item.color.z;
-    constants.baseColor[3] = 1.0f;
-    const Result<void> updated =
-        m_impl->constants->Update(device, &constants, static_cast<uint32_t>(sizeof(constants)));
-    if (!updated) {
-      return updated.GetError();
+  if (hasMesh) {
+    detail::BindPipeline(context, *m_impl->shader, *m_impl->layout, *m_impl->pipeline);
+    ID3D11Buffer* vertexBuffer = static_cast<ID3D11Buffer*>(mesh.vertices->Handle());
+    UINT stride = static_cast<UINT>(mesh.vertexStride);
+    UINT offset = 0;
+    context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+    context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(mesh.indices->Handle()),
+                              DXGI_FORMAT_R16_UINT, 0);
+
+    for (const RenderItem& item : items) {
+      GBufferConstants constants;
+      constants.world = item.world;
+      constants.viewProjection = viewProjection;
+      constants.baseColor[0] = item.color.x;
+      constants.baseColor[1] = item.color.y;
+      constants.baseColor[2] = item.color.z;
+      constants.baseColor[3] = 1.0f;
+      const Result<void> updated =
+          m_impl->constants->Update(device, &constants, static_cast<uint32_t>(sizeof(constants)));
+      if (!updated) {
+        return updated.GetError();
+      }
+      context->DrawIndexed(static_cast<UINT>(mesh.indexCount), 0, 0);
     }
-    context->DrawIndexed(static_cast<UINT>(mesh.indexCount), 0, 0);
+  }
+
+  if (!terrains.empty()) {
+    detail::BindPipeline(context, *m_impl->terrainShader, *m_impl->terrainLayout,
+                         *m_impl->terrainPipeline);
+    for (const TerrainGeometry& terrain : terrains) {
+      if (terrain.vertices == nullptr || terrain.indices == nullptr || terrain.indexCount == 0) {
+        continue;
+      }
+      ID3D11Buffer* vertexBuffer = static_cast<ID3D11Buffer*>(terrain.vertices->Handle());
+      UINT stride = static_cast<UINT>(terrain.vertexStride);
+      UINT offset = 0;
+      context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+      context->IASetIndexBuffer(static_cast<ID3D11Buffer*>(terrain.indices->Handle()),
+                                DXGI_FORMAT_R16_UINT, 0);
+
+      GBufferConstants constants;
+      constants.world = terrain.world;
+      constants.viewProjection = viewProjection;
+      const Result<void> updated =
+          m_impl->constants->Update(device, &constants, static_cast<uint32_t>(sizeof(constants)));
+      if (!updated) {
+        return updated.GetError();
+      }
+      context->DrawIndexed(static_cast<UINT>(terrain.indexCount), 0, 0);
+    }
   }
 
   context->OMSetRenderTargets(0, nullptr, nullptr);

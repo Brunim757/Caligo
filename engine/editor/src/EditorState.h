@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <caligo/build/Project.h>
 #include <caligo/core/Log.h>
 #include <caligo/core/Math.h>
 #include <caligo/core/Time.h>
@@ -14,6 +15,7 @@
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -21,6 +23,16 @@ namespace caligo::editor {
 
 enum class GizmoOperation { Translate, Rotate, Scale };
 enum class GizmoSpace { Local, World };
+enum class TerrainBrushMode { Raise, Lower, Smooth, Flatten, Paint };
+
+struct TerrainBrush {
+  bool active = false;
+  bool stroking = false;
+  TerrainBrushMode mode = TerrainBrushMode::Raise;
+  float radius = 6.0f;
+  float strength = 4.0f;
+  uint32_t layer = 0;
+};
 
 struct Camera {
   math::Vec3 target{0.0f, 0.0f, 0.0f};
@@ -34,7 +46,12 @@ struct Camera {
   void Focus(const math::Vec3& point) noexcept;
 };
 
-enum class PendingAction { None, NewScene, OpenScene, Quit };
+enum class PendingAction { None, NewScene, OpenScene, Quit, OpenProject, NewProject, CloseProject };
+enum class EditorMode { Hub, Editor };
+struct RecentProject {
+  std::filesystem::path path;
+  std::string name;
+};
 
 struct PlaySession {
   bool active = false;
@@ -56,6 +73,15 @@ struct EditorState {
   std::filesystem::path scenePath;
   uint64_t savedRevision = 0;
 
+  EditorMode mode = EditorMode::Hub;
+  std::filesystem::path projectPath;
+  std::optional<build::Project> project;
+  std::vector<RecentProject> recentProjects;
+  std::filesystem::path pendingProjectPath;
+  std::array<char, 128> newProjectName{};
+  std::filesystem::path newProjectLocation;
+  std::array<char, 96> projectSearch{};
+
   bool initialized = false;
   bool imguiContext = false;
   bool win32Backend = false;
@@ -65,9 +91,12 @@ struct EditorState {
 
   float dpiScale = 1.0f;
   ImFont* consoleFont = nullptr;
+  ImFont* hubTitleFont = nullptr;
+  ImFont* hubHeadingFont = nullptr;
   Camera camera;
   GizmoOperation operation = GizmoOperation::Translate;
   GizmoSpace space = GizmoSpace::Local;
+  TerrainBrush terrainBrush;
   bool orbiting = false;
   bool panning = false;
 
