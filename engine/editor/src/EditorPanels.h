@@ -44,5 +44,6 @@ void OpenProject(EditorState& state, const std::filesystem::path& path);
 void CreateProject(EditorState& state, const std::filesystem::path& directory,
                    const std::string& name);
 void EnterProject(EditorState& state);
+void InitializeProjects(EditorState& state);
 
 }

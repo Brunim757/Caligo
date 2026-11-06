@@ -185,6 +185,18 @@ void ExecuteAction(EditorState& state, PendingAction action) {
     state.allowClose = true;
     state.window->RequestClose();
     break;
+  case PendingAction::CloseProject:
+    state.project.reset();
+    state.projectPath.clear();
+    state.scene = scene::Scene{};
+    state.scenePath.clear();
+    state.selected = scene::kNoEntity;
+    state.nameOwner = scene::kNoEntity;
+    state.eulerOwner = scene::kNoEntity;
+    state.savedRevision = state.scene.Revision();
+    state.mode = EditorMode::Hub;
+    UpdateWindowTitle(state);
+    break;
   case PendingAction::None:
     break;
   }
@@ -230,16 +242,21 @@ void UpdateWindowTitle(EditorState& state) {
   if (state.window == nullptr) {
     return;
   }
-  std::string base;
-  if (state.project.has_value()) {
-    base = state.project->name;
-  } else if (!state.scenePath.empty()) {
-    base = PathFileName(state.scenePath);
+  std::string title;
+  if (state.mode == EditorMode::Hub) {
+    title = "Caligo — Hub de projetos";
   } else {
-    base = std::string("Sem título");
+    std::string base;
+    if (state.project.has_value()) {
+      base = state.project->name;
+    } else if (!state.scenePath.empty()) {
+      base = PathFileName(state.scenePath);
+    } else {
+      base = std::string("Sem título");
+    }
+    title = std::format("{} — Caligo Editor{}", IsDirty(state) ? base + " *" : base,
+                        state.play.active ? " (executando)" : "");
   }
-  const std::string title = std::format("{} — Caligo Editor{}", IsDirty(state) ? base + " *" : base,
-                                        state.play.active ? " (executando)" : "");
   if (title != state.windowTitle) {
     state.windowTitle = title;
     state.window->SetTitle(state.windowTitle);

@@ -100,6 +100,14 @@ void DrawFileMenu(EditorState& state) {
   if (!ImGui::BeginMenu("Arquivo")) {
     return;
   }
+  if (state.project.has_value()) {
+    ImGui::TextDisabled("%s", state.project->name.c_str());
+    ImGui::Separator();
+    if (ImGui::MenuItem("Fechar projeto")) {
+      RequestAction(state, PendingAction::CloseProject);
+    }
+    ImGui::Separator();
+  }
   ImGui::BeginDisabled(state.play.active);
   if (ImGui::MenuItem("Nova cena", "Ctrl+N")) {
     RequestAction(state, PendingAction::NewScene);
@@ -282,7 +290,7 @@ void DrawMainMenu(EditorState& state) {
   DrawViewMenu(state);
   DrawHelpMenu(state);
 
-  const char* release = "R1";
+  const char* release = "R3";
   const float offset =
       ImGui::GetWindowWidth() - ImGui::CalcTextSize(release).x - Pixels(state, 16.0f);
   ImGui::SameLine(offset);

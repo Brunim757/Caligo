@@ -46,7 +46,7 @@ struct Camera {
   void Focus(const math::Vec3& point) noexcept;
 };
 
-enum class PendingAction { None, NewScene, OpenScene, Quit, OpenProject, NewProject };
+enum class PendingAction { None, NewScene, OpenScene, Quit, OpenProject, NewProject, CloseProject };
 enum class EditorMode { Hub, Editor };
 struct RecentProject {
   std::filesystem::path path;
@@ -78,7 +78,9 @@ struct EditorState {
   std::optional<build::Project> project;
   std::vector<RecentProject> recentProjects;
   std::filesystem::path pendingProjectPath;
-  std::string newProjectName = "NovoJogo";
+  std::array<char, 128> newProjectName{};
+  std::filesystem::path newProjectLocation;
+  std::array<char, 96> projectSearch{};
 
   bool initialized = false;
   bool imguiContext = false;
@@ -89,6 +91,8 @@ struct EditorState {
 
   float dpiScale = 1.0f;
   ImFont* consoleFont = nullptr;
+  ImFont* hubTitleFont = nullptr;
+  ImFont* hubHeadingFont = nullptr;
   Camera camera;
   GizmoOperation operation = GizmoOperation::Translate;
   GizmoSpace space = GizmoSpace::Local;

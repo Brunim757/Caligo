@@ -1,6 +1,6 @@
 # Caligo — Editor
 
-Versão 0.2
+Versão 0.3
 
 ## 1. Responsabilidade
 
@@ -36,7 +36,7 @@ A tela tem uma moldura global e uma área de trabalho:
 
 O layout de cada ferramenta é salvo separadamente. **Exibir → Restaurar layout** restaura o layout da ferramenta ativa, não um layout único global.
 
-**Hub de projetos.** Quando o editor abre sem projeto, ele mostra o hub: criar, abrir, projetos recentes e alternar entre projetos. O hub é a porta de entrada da R3, quando o descritor `.cproject` e o assembly por projeto passam a existir (D-028). Com um projeto aberto, a moldura de ferramentas assume.
+**Hub de projetos.** Quando o editor abre sem projeto, ele mostra o hub em tela cheia: marca, projetos recentes persistidos entre execuções, criação de projeto com nome e pasta de destino e abertura de `.cproject` existente. O hub não mostra a barra de menus nem a moldura de ferramentas; o título da janela identifica o hub. **Arquivo → Fechar projeto** volta ao hub. Com um projeto aberto, a moldura de ferramentas assume. O hub é a porta de entrada da R3, quando o descritor `.cproject` e o assembly por projeto passam a existir (D-028).
 
 A execução é global, não uma ferramenta. `F5` a `F8` funcionam em qualquer ferramenta. Durante a execução, a edição de cena fica bloqueada (D-026) e o viewport mostra o mundo simulado.
 
@@ -275,5 +275,6 @@ A ordem respeita a D-001: a ferramenta entra com o sistema que ela edita.
 
 ## 9. Histórico
 
+- **0.3** — detalha o hub: visual de tela cheia, recentes persistidos, criação com pasta de destino, retorno por Fechar projeto e título próprio.
 - **0.2** — reescreve §5.4 por RFC-001: ícones em três camadas — Lucide na UI, Fluent UI System Icons nos assets e conjunto Caligo próprio para os tipos da engine —, no lugar de "Lucide para tudo".
 - **0.1** — define o hub de projetos, o editor por ferramentas, o viewport só de interação 3D, a ferramenta de terreno, a de ambiente, as configurações em quatro seções, o registro de componentes, a identidade visual de 13 px e os ícones Lucide.

@@ -122,6 +122,7 @@ Result<void> Editor::Initialize(platform::Window& window, const std::filesystem:
   }
 
   m_state->mode = EditorMode::Hub;
+  InitializeProjects(*m_state);
   m_state->initialized = true;
   CALIGO_LOG_INFO("editor pronto: {} x {}", width, height);
   return {};
@@ -162,11 +163,11 @@ bool Editor::Frame() {
   ImGui::NewFrame();
   ImGuizmo::BeginFrame();
 
-  DrawMainMenu(*m_state);
   if (m_state->mode == EditorMode::Hub) {
     DrawProjectHub(*m_state);
     DrawModals(*m_state);
   } else {
+    DrawMainMenu(*m_state);
     DrawDockSpace(*m_state);
     DrawHierarchy(*m_state);
     DrawInspector(*m_state);

@@ -1,10 +1,31 @@
 #include <windows.h>
 
 #include <caligo/platform/System.h>
+#include <cstdint>
 #include <format>
+#include <shlobj.h>
 #include <string>
 
 namespace caligo::platform {
+
+namespace {
+
+Result<std::filesystem::path> KnownFolder(REFKNOWNFOLDERID folder) {
+  PWSTR raw = nullptr;
+  const HRESULT result = SHGetKnownFolderPath(folder, KF_FLAG_DEFAULT, nullptr, &raw);
+  if (FAILED(result) || raw == nullptr) {
+    if (raw != nullptr) {
+      CoTaskMemFree(raw);
+    }
+    return Error{
+        std::format("SHGetKnownFolderPath failed: 0x{:08X}", static_cast<uint32_t>(result)), 1};
+  }
+  const std::filesystem::path path(raw);
+  CoTaskMemFree(raw);
+  return path;
+}
+
+}
 
 void ConfigureProcess() noexcept {
   SetConsoleOutputCP(CP_UTF8);
@@ -28,6 +49,18 @@ Result<std::filesystem::path> WindowsDirectory() {
   }
   buffer.resize(length);
   return std::filesystem::path(buffer);
+}
+
+Result<std::filesystem::path> DocumentsDirectory() {
+  return KnownFolder(FOLDERID_Documents);
+}
+
+Result<std::filesystem::path> UserDataDirectory() {
+  const Result<std::filesystem::path> roaming = KnownFolder(FOLDERID_RoamingAppData);
+  if (!roaming) {
+    return roaming.GetError();
+  }
+  return roaming.Value() / "Caligo";
 }
 
 }
